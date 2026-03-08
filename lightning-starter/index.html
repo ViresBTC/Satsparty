@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+  <title>SatsParty</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="/src/styles/base.css"/>
+  <link rel="stylesheet" href="/src/styles/onboarding.css"/>
+  <link rel="stylesheet" href="/src/styles/dashboard.css"/>
+</head>
+<body>
+
+<div class="toast" id="toast"></div>
+<div class="confetti-wrap" id="confetti"></div>
+
+<div class="app" id="app">
+  <!-- Screens are injected by JS based on state -->
+  <div id="app-loading" style="flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:1rem;">
+    <div style="font-family:var(--font-display);font-size:2rem;">Sats<span style="color:var(--electric)">Party</span></div>
+    <div style="font-family:var(--font-mono);font-size:.6rem;color:var(--muted);letter-spacing:.12em">CARGANDO...</div>
+  </div>
+</div>
+
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>
