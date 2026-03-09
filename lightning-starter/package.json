@@ -12,13 +12,21 @@
     "example:nwc": "node src/examples/nwc-connect.js",
     "example:lnurl": "node src/examples/lnurl-pay.js"
   },
-  "keywords": ["lightning", "bitcoin", "nostr", "nwc", "hackathon", "lacrypta"],
+  "keywords": [
+    "lightning",
+    "bitcoin",
+    "nostr",
+    "nwc",
+    "hackathon",
+    "lacrypta"
+  ],
   "author": "La Crypta",
   "license": "MIT",
   "dependencies": {
     "@getalby/lightning-tools": "^5.0.0",
     "@getalby/sdk": "^3.0.0",
     "@nostr-dev-kit/ndk": "^2.0.0",
+    "html5-qrcode": "^2.3.8",
     "webln": "^0.3.0"
   },
   "devDependencies": {
