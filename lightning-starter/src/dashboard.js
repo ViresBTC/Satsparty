@@ -47,8 +47,6 @@ async function initDashboard() {
 function setupDashboardEvents() {
   // Navigation
   onClick("nav-home", () => navTo("s-dashboard"));
-  onClick("nav-receive", () => navTo("s-receive"));
-  onClick("nav-send", () => navTo("s-send"));
   onClick("nav-history", () => {
     refreshHistory();
     navTo("s-history");
@@ -126,6 +124,10 @@ function setupDashboardEvents() {
   onClick("btn-copy-addr-pesos", () => {
     copyToClipboard(ctx.getState().lightningAddress || "wallet@satsparty.app");
   });
+  onClick("btn-invoice-pesos", () => {
+    navTo("s-receive");
+    setTimeout(() => switchTab("invoice"), 100);
+  });
 
   // USDT wizard navigation
   onClick("usdt-next-1", () => wizardStep("usdt", 2, 3));
@@ -176,8 +178,8 @@ function setupDashboardEvents() {
 
 const navMap = {
   "s-dashboard": "nav-home",
-  "s-receive": "nav-receive",
-  "s-send": "nav-send",
+  "s-receive": "nav-home",
+  "s-send": "nav-home",
   "s-history": "nav-history",
   "s-settings": "nav-settings",
 };
@@ -260,34 +262,89 @@ function cycleCurrency() {
 
 // ── HISTORY ──
 
+function getDemoTransactions() {
+  const now = Math.floor(Date.now() / 1000);
+  return [
+    { type: "in", amount: 100, description: "🎉 Bienvenida SatsParty", timestamp: now - 120 },
+    { type: "out", amount: 50, description: "☕ Café con Lightning", timestamp: now - 900 },
+    { type: "in", amount: 200, description: "🎯 Misión: Primer pago", timestamp: now - 1800 },
+    { type: "out", amount: 30, description: "🍕 Porción de pizza", timestamp: now - 3600 },
+    { type: "in", amount: 500, description: "💸 Recarga desde exchange", timestamp: now - 7200 },
+    { type: "out", amount: 150, description: "🎁 Regalo a amigo", timestamp: now - 10800 },
+    { type: "in", amount: 1000, description: "🏆 Premio trivia Lightning", timestamp: now - 86400 },
+    { type: "out", amount: 75, description: "🍺 Cerveza artesanal", timestamp: now - 86400 - 1800 },
+    { type: "in", amount: 300, description: "🤝 Split de cuenta", timestamp: now - 86400 - 3600 },
+    { type: "out", amount: 21, description: "⚡ Tip al barista", timestamp: now - 86400 * 2 },
+    { type: "in", amount: 150, description: "🎯 Misión: Escanear QR", timestamp: now - 86400 * 2 - 600 },
+  ];
+}
+
 async function refreshHistory() {
   try {
-    if (!ctx.nwcService.isConnected()) return;
-    const txs = await ctx.nwcService.listTransactions(20);
-    ctx.setState({ transactions: txs });
-    renderHistoryList(txs);
+    if (ctx.nwcService.isConnected()) {
+      const txs = await ctx.nwcService.listTransactions(20);
+      ctx.setState({ transactions: txs });
+      renderHistoryList(txs);
+    } else {
+      // Demo mode: show example transactions
+      const demoTxs = getDemoTransactions();
+      renderHistoryList(demoTxs);
+    }
   } catch (err) {
     console.error("Error fetching history:", err);
-    // Render from cached state
-    renderHistoryList(ctx.getState().transactions || []);
+    renderHistoryList(ctx.getState().transactions || getDemoTransactions());
   }
 }
 
 function renderHistoryList(txs) {
   const el = document.getElementById("history-body");
+  const summaryEl = document.getElementById("history-summary");
   if (!el) return;
 
   if (txs.length === 0) {
-    el.innerHTML = `<div style="text-align:center;padding:3rem 1rem;color:var(--muted);font-family:var(--font-mono);font-size:.7rem;">Sin transacciones todavía</div>`;
+    if (summaryEl) summaryEl.innerHTML = "";
+    el.innerHTML = `
+      <div style="text-align:center;padding:3rem 1rem;">
+        <div style="font-size:2rem;margin-bottom:.8rem;opacity:.4">⚡</div>
+        <div style="font-family:var(--font-display);font-size:1.3rem;margin-bottom:.4rem;color:var(--white)">Sin transacciones</div>
+        <div style="font-family:var(--font-mono);font-size:.6rem;color:var(--muted);line-height:1.6">Enviá o recibí sats para ver<br>tu historial acá.</div>
+      </div>`;
     return;
   }
 
-  // Group by date
+  // Calculate summary
+  const totalIn = txs.filter(t => t.type === "in").reduce((s, t) => s + t.amount, 0);
+  const totalOut = txs.filter(t => t.type === "out").reduce((s, t) => s + t.amount, 0);
+
+  if (summaryEl) {
+    summaryEl.innerHTML = `
+      <div class="history-stats">
+        <div class="history-stat">
+          <span class="history-stat-label">⬇ Recibido</span>
+          <span class="history-stat-value in">+${totalIn.toLocaleString()} sats</span>
+        </div>
+        <div class="history-stat">
+          <span class="history-stat-label">⬆ Enviado</span>
+          <span class="history-stat-value out">-${totalOut.toLocaleString()} sats</span>
+        </div>
+      </div>`;
+  }
+
+  // Group by date label
+  const now = Math.floor(Date.now() / 1000);
+  const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+  const todayTs = Math.floor(todayStart.getTime() / 1000);
+  const yesterdayTs = todayTs - 86400;
+
   const grouped = {};
   txs.forEach((tx) => {
-    const date = tx.timestamp ? new Date(tx.timestamp * 1000).toLocaleDateString("es-AR") : "Hoy";
-    if (!grouped[date]) grouped[date] = [];
-    grouped[date].push(tx);
+    let label;
+    if (!tx.timestamp) { label = "Hoy"; }
+    else if (tx.timestamp >= todayTs) { label = "Hoy"; }
+    else if (tx.timestamp >= yesterdayTs) { label = "Ayer"; }
+    else { label = new Date(tx.timestamp * 1000).toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "short" }); }
+    if (!grouped[label]) grouped[label] = [];
+    grouped[label].push(tx);
   });
 
   el.innerHTML = Object.entries(grouped)
@@ -832,13 +889,8 @@ function getDashboardHTML() {
     </div>
     <div class="screen-body" style="flex:1;overflow-y:auto;padding:.5rem 1.4rem 1.4rem">
       <p class="screen-title">Historial</p>
-    </div>
-    <div id="history-body" class="history-body">
-      <div class="history-empty">
-        <div style="font-size:2rem;margin-bottom:.8rem;opacity:.4">⚡</div>
-        <div style="font-family:var(--font-display);font-size:1.3rem;margin-bottom:.4rem;color:var(--white)">Sin transacciones</div>
-        <div style="font-family:var(--font-mono);font-size:.6rem;color:var(--muted);line-height:1.6">Enviá o recibí sats para ver<br>tu historial acá.</div>
-      </div>
+      <div class="history-summary" id="history-summary"></div>
+      <div id="history-body" class="history-body"></div>
     </div>
   </div>
 
@@ -919,15 +971,11 @@ function getDashboardHTML() {
             <div class="wizard-option-sub">Retiro Lightning directo</div>
           </div>
           <div class="wizard-option">
-            <div class="wizard-option-name" style="color:#4FC3F7">Lemon</div>
+            <div class="wizard-option-name" style="color:var(--electric)">Lemon</div>
             <div class="wizard-option-sub">Exchange popular · Retiro BTC on-chain</div>
           </div>
           <div class="wizard-option">
-            <div class="wizard-option-name" style="color:#66BB6A">Buenbit</div>
-            <div class="wizard-option-sub">Depósito CVU · Retiro BTC</div>
-          </div>
-          <div class="wizard-option">
-            <div class="wizard-option-name" style="color:#FF8A65">Ripio</div>
+            <div class="wizard-option-name" style="color:var(--electric)">Ripio</div>
             <div class="wizard-option-sub">Exchange histórico · Retiro BTC</div>
           </div>
         </div>
@@ -1003,7 +1051,7 @@ function getDashboardHTML() {
           <span class="wizard-card-num">04</span>
           <span class="wizard-card-title">Retirá a Lightning</span>
         </div>
-        <p class="wizard-card-desc">Enviá los BTC desde el exchange a tu Lightning Address.</p>
+        <p class="wizard-card-desc">Enviá los BTC desde el exchange a tu Lightning Address o usá un invoice para recibir un monto exacto.</p>
         <div class="wizard-info-box">
           <div class="wizard-info-row">
             <span class="wizard-info-label">Tu address</span>
@@ -1018,9 +1066,16 @@ function getDashboardHTML() {
             <span class="wizard-info-val" style="color:var(--green)">~10 segundos</span>
           </div>
         </div>
-        <button class="btn-primary" id="btn-copy-addr-pesos" style="margin-bottom:.5rem">Copiar mi Lightning Address ⎘</button>
+        <div style="display:flex;gap:.5rem;margin-bottom:.5rem">
+          <button class="btn-primary" id="btn-copy-addr-pesos" style="flex:1">Copiar Address ⎘</button>
+          <button class="btn-primary" id="btn-invoice-pesos" style="flex:1">Generar Invoice ⚡</button>
+        </div>
+        <div style="font-family:var(--font-mono);font-size:.52rem;color:rgba(242,237,230,.45);line-height:1.6;margin-bottom:.8rem;padding:0 .2rem">
+          <strong style="color:rgba(242,237,230,.65)">Address</strong> = recibís cualquier monto, como un alias.<br>
+          <strong style="color:rgba(242,237,230,.65)">Invoice</strong> = pedís un monto exacto, con QR escaneable.
+        </div>
         <div class="wizard-tip">
-          <span style="color:var(--electric)">TIP:</span> Si el exchange no soporta Lightning, retirá on-chain a una wallet que haga swap (Muun, Phoenix).
+          <span style="color:var(--electric)">TIP:</span> El exchange te puede pedir que les des un invoice con un monto en vez de mandar directamente a tu address.
         </div>
         <div style="display:flex;gap:.5rem">
           <button class="btn-secondary" id="pesos-prev-4" style="flex:1">← Atrás</button>
@@ -1142,16 +1197,7 @@ function getDashboardHTML() {
   <!-- BOTTOM NAV BAR -->
   <div class="bottom-nav-bar" id="bottom-nav-bar">
     <button class="nav-item active" id="nav-home">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12L12 3l9 9"/><path d="M9 21V12h6v9"/></svg>
-      <span>Inicio</span>
-    </button>
-    <button class="nav-item" id="nav-receive">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="3" x2="12" y2="15"/><polyline points="7,10 12,15 17,10"/><line x1="5" y1="21" x2="19" y2="21"/></svg>
-      <span>Recibir</span>
-    </button>
-    <button class="nav-item" id="nav-send">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="21" x2="12" y2="9"/><polyline points="7,14 12,9 17,14"/><line x1="5" y1="3" x2="19" y2="3"/></svg>
-      <span>Enviar</span>
+      <span class="nav-logo">Sats<span>Party</span></span>
     </button>
     <button class="nav-item" id="nav-history">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12,6 12,12 16,14"/></svg>

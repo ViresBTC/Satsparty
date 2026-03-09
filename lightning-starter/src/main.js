@@ -148,21 +148,105 @@ export function showToast(msg) {
 export function launchConfetti() {
   const container = document.getElementById("confetti");
   if (!container) return;
-  const colors = ["#F7FF00", "#FF6B1A", "#00FF87", "#F2EDE6"];
-  for (let i = 0; i < 50; i++) {
-    const piece = document.createElement("div");
-    const size = Math.random() * 8 + 4;
-    const dur = Math.random() * 1.5 + 1;
-    const delay = Math.random() * 0.8;
-    piece.style.cssText = `
-      position:fixed;width:${size}px;height:${size}px;
-      background:${colors[Math.floor(Math.random() * colors.length)]};
-      left:${Math.random() * 100}%;top:-10px;
-      border-radius:${Math.random() > 0.5 ? "50%" : "0"};
-      pointer-events:none;z-index:500;
-      animation:confettiFall ${dur}s ease-in ${delay}s forwards;
+  container.innerHTML = "";
+
+  // Double flash — intense strobe
+  for (let f = 0; f < 2; f++) {
+    const flash = document.createElement("div");
+    flash.style.cssText = `
+      position:fixed;inset:0;
+      background:radial-gradient(circle at 50% 45%, rgba(247,255,0,.35), rgba(247,255,0,.08) 60%, transparent 80%);
+      pointer-events:none;z-index:499;
+      animation:lightningFlash ${0.4 + f * 0.3}s ease-out ${f * 0.15}s forwards;
     `;
-    container.appendChild(piece);
-    setTimeout(() => piece.remove(), (dur + delay) * 1000 + 300);
+    container.appendChild(flash);
+    setTimeout(() => flash.remove(), 800 + f * 300);
+  }
+
+  // SVG lightning bolt (no emoji)
+  const bolt = document.createElement("div");
+  bolt.innerHTML = `<svg width="64" height="64" viewBox="0 0 24 24" fill="#F7FF00" xmlns="http://www.w3.org/2000/svg"><path d="M13 2L4 14h7l-2 8 9-12h-7l2-8z"/></svg>`;
+  bolt.style.cssText = `
+    position:fixed;left:50%;top:45%;
+    transform:translate(-50%,-50%) scale(0);
+    z-index:502;pointer-events:none;
+    animation:boltAppear .6s cubic-bezier(.34,1.56,.64,1) forwards;
+    filter:drop-shadow(0 0 30px rgba(247,255,0,.8)) drop-shadow(0 0 60px rgba(247,255,0,.4));
+  `;
+  container.appendChild(bolt);
+  setTimeout(() => bolt.remove(), 2500);
+
+  // Core glow behind bolt
+  const glow = document.createElement("div");
+  glow.style.cssText = `
+    position:fixed;left:50%;top:45%;
+    width:20px;height:20px;border-radius:50%;
+    background:radial-gradient(circle, rgba(247,255,0,.6) 0%, transparent 70%);
+    transform:translate(-50%,-50%) scale(1);
+    pointer-events:none;z-index:500;
+    animation:glowPulse .8s ease-out forwards;
+  `;
+  container.appendChild(glow);
+  setTimeout(() => glow.remove(), 1000);
+
+  // Pulse rings — 5 waves, more intense
+  for (let i = 0; i < 5; i++) {
+    const ring = document.createElement("div");
+    const color = i % 2 === 0 ? "rgba(247,255,0,.5)" : "rgba(0,255,135,.3)";
+    ring.style.cssText = `
+      position:fixed;left:50%;top:45%;
+      width:30px;height:30px;border-radius:50%;
+      border:2px solid ${color};
+      transform:translate(-50%,-50%) scale(1);
+      pointer-events:none;z-index:501;
+      animation:pulseRing 1.2s ease-out ${i * 0.18}s forwards;
+    `;
+    container.appendChild(ring);
+    setTimeout(() => ring.remove(), 1800 + i * 180);
+  }
+
+  // Electric sparks — 20 particles, bigger spread
+  for (let i = 0; i < 20; i++) {
+    const spark = document.createElement("div");
+    const angle = (i / 20) * 360 + (Math.random() - 0.5) * 30;
+    const dist = 80 + Math.random() * 120;
+    const size = Math.random() * 4 + 2;
+    const dur = 0.5 + Math.random() * 0.5;
+    const delay = Math.random() * 0.25;
+    const colors = ["#F7FF00", "#00FF87", "#F2EDE6", "#FF6B1A"];
+    const color = colors[Math.floor(Math.random() * colors.length)];
+    spark.style.cssText = `
+      position:fixed;left:50%;top:45%;
+      width:${size}px;height:${size}px;border-radius:50%;
+      background:${color};
+      transform:translate(-50%,-50%);
+      pointer-events:none;z-index:501;
+      animation:sparkFly ${dur}s ease-out ${delay}s forwards;
+      --spark-x:${Math.cos(angle * Math.PI / 180) * dist}px;
+      --spark-y:${Math.sin(angle * Math.PI / 180) * dist}px;
+      box-shadow:0 0 8px ${color};
+    `;
+    container.appendChild(spark);
+    setTimeout(() => spark.remove(), (dur + delay) * 1000 + 200);
+  }
+
+  // Electric arc lines — 6 random lightning branches
+  for (let i = 0; i < 6; i++) {
+    const arc = document.createElement("div");
+    const angle = Math.random() * 360;
+    const len = 40 + Math.random() * 60;
+    const delay = Math.random() * 0.3;
+    arc.style.cssText = `
+      position:fixed;left:50%;top:45%;
+      width:${len}px;height:1.5px;
+      background:linear-gradient(90deg, rgba(247,255,0,.8), transparent);
+      transform-origin:left center;
+      transform:translate(0,-50%) rotate(${angle}deg);
+      pointer-events:none;z-index:501;
+      animation:arcFlash .3s ease-out ${delay}s forwards;
+      box-shadow:0 0 4px rgba(247,255,0,.6);
+    `;
+    container.appendChild(arc);
+    setTimeout(() => arc.remove(), 600 + delay * 1000);
   }
 }
