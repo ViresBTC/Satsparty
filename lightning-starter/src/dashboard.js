@@ -6,10 +6,12 @@
  */
 
 import { LightningAddress } from "@getalby/lightning-tools";
+import { Html5Qrcode } from "html5-qrcode";
 
 let ctx = {};
 let currentView = "s-dashboard";
 let currencyIdx = 0;
+let qrScanner = null;
 
 export function renderDashboard(app, context) {
   ctx = context;
@@ -21,6 +23,14 @@ export function renderDashboard(app, context) {
 
 async function initDashboard() {
   navTo("s-dashboard");
+
+  // Generar QR de Lightning Address
+  const state = ctx.getState();
+  const addr = state.lightningAddress || "wallet@satsparty.app";
+  const qrContainer = document.getElementById("address-qr-container");
+  if (qrContainer) {
+    qrContainer.innerHTML = ctx.generateQRSvg(addr, 150);
+  }
 
   // Reconectar NWC
   const connected = await ctx.reconnectWallet();
@@ -47,19 +57,24 @@ function setupDashboardEvents() {
 
   // Dashboard actions
   onClick("dash-address-pill", () => {
-    ctx.showToast("Lightning Address copiada");
+    copyToClipboard(ctx.getState().lightningAddress || "wallet@satsparty.app");
   });
   onClick("dash-balance-row", cycleCurrency);
 
   // Action buttons
   onClick("action-recv", () => navTo("s-receive"));
   onClick("action-send", () => navTo("s-send"));
-  onClick("action-scan", () => navTo("s-scan"));
+  onClick("action-scan", () => {
+    navTo("s-scan");
+    setTimeout(() => startRealScan(), 300);
+  });
 
   // Receive
   onClick("tab-address-btn", () => switchTab("address"));
   onClick("tab-invoice-btn", () => switchTab("invoice"));
-  onClick("btn-copy-address", () => ctx.showToast("Lightning Address copiada"));
+  onClick("btn-copy-address", () => {
+    copyToClipboard(ctx.getState().lightningAddress || "wallet@satsparty.app");
+  });
   onClick("btn-generate-invoice", generateInvoice);
 
   // Send
@@ -68,15 +83,66 @@ function setupDashboardEvents() {
   // Scan
   onClick("btn-simulate-scan", simulateScan);
   onClick("btn-use-scan", useScanResult);
+  onClick("btn-scan-again", () => {
+    resetScanUI();
+    startRealScan();
+  });
 
   // Settings
   onClick("btn-toggle-settings-key", () => {
     document.getElementById("settings-key-val")?.classList.toggle("shown");
   });
+  onClick("btn-copy-nwc", () => {
+    copyToClipboard(ctx.getState().nwcUrl || "");
+  });
+  onClick("btn-reset-wallet", () => {
+    if (confirm("¿Seguro? Vas a perder el acceso a esta wallet si no guardaste la clave.")) {
+      import("./services/state.js").then(({ resetState }) => {
+        resetState();
+        window.location.reload();
+      });
+    }
+  });
+
+  // Recharge banners
+  setTimeout(() => {
+    document.querySelector(".recharge-banner.pesos")?.addEventListener("click", () => {
+      resetWizard("pesos", 4);
+      navTo("s-recharge-pesos");
+    });
+    document.querySelector(".recharge-banner.usdt")?.addEventListener("click", () => {
+      resetWizard("usdt", 3);
+      navTo("s-recharge-usdt");
+    });
+  }, 10);
+
+  // Pesos wizard navigation
+  onClick("pesos-next-1", () => wizardStep("pesos", 2, 4));
+  onClick("pesos-next-2", () => wizardStep("pesos", 3, 4));
+  onClick("pesos-next-3", () => wizardStep("pesos", 4, 4));
+  onClick("pesos-prev-2", () => wizardStep("pesos", 1, 4));
+  onClick("pesos-prev-3", () => wizardStep("pesos", 2, 4));
+  onClick("pesos-prev-4", () => wizardStep("pesos", 3, 4));
+  onClick("btn-copy-addr-pesos", () => {
+    copyToClipboard(ctx.getState().lightningAddress || "wallet@satsparty.app");
+  });
+
+  // USDT wizard navigation
+  onClick("usdt-next-1", () => wizardStep("usdt", 2, 3));
+  onClick("usdt-next-2", () => wizardStep("usdt", 3, 3));
+  onClick("usdt-prev-2", () => wizardStep("usdt", 1, 3));
+  onClick("usdt-prev-3", () => wizardStep("usdt", 2, 3));
+  onClick("btn-copy-boltz-addr", () => {
+    copyToClipboard("TQn9Y2khEsLJW1ChVWFMSMeRDow5KcbLSE");
+  });
 
   // Close buttons (back to dashboard)
   document.querySelectorAll("[data-close]").forEach((el) => {
-    el.addEventListener("click", () => navTo("s-dashboard"));
+    el.addEventListener("click", () => {
+      stopScanner();
+      resetScanUI();
+      navTo("s-dashboard");
+    });
   });
 
   // Back buttons
@@ -115,7 +181,7 @@ const navMap = {
   "s-history": "nav-history",
   "s-settings": "nav-settings",
 };
-const hideNavScreens = ["s-success", "s-scan"];
+const hideNavScreens = ["s-success", "s-scan", "s-recharge-pesos", "s-recharge-usdt"];
 
 function navTo(id) {
   const curr = document.getElementById(currentView);
@@ -432,25 +498,156 @@ async function confirmSend() {
 
 // ── SCAN ──
 
+async function startRealScan() {
+  const readerEl = document.getElementById("qr-reader");
+  const idleEl = document.getElementById("scan-idle");
+  const statusEl = document.getElementById("scan-status");
+
+  if (!readerEl) return;
+
+  // Ocultar placeholder, mostrar reader
+  if (idleEl) idleEl.style.display = "none";
+  if (statusEl) statusEl.textContent = "Iniciando cámara...";
+
+  try {
+    qrScanner = new Html5Qrcode("qr-reader");
+
+    await qrScanner.start(
+      { facingMode: "environment" },
+      {
+        fps: 10,
+        qrbox: { width: 220, height: 220 },
+        aspectRatio: 1.0,
+      },
+      (decodedText) => {
+        // QR leído exitosamente
+        handleScanResult(decodedText);
+      },
+      () => {
+        // Silenciar errores de frames sin QR
+      }
+    );
+
+    if (statusEl) statusEl.textContent = "Apuntá la cámara al código QR";
+  } catch (err) {
+    console.error("Error iniciando cámara:", err);
+    // Fallback: mostrar el modo simulado
+    if (idleEl) idleEl.style.display = "flex";
+    if (statusEl) statusEl.textContent = "No se pudo acceder a la cámara";
+    document.getElementById("scan-fallback")?.style.setProperty("display", "block");
+  }
+}
+
+async function stopScanner() {
+  if (qrScanner) {
+    try {
+      const state = qrScanner.getState();
+      // state 2 = scanning
+      if (state === 2) {
+        await qrScanner.stop();
+      }
+    } catch (e) {
+      // Ignorar errores al detener
+    }
+    qrScanner = null;
+  }
+}
+
+function handleScanResult(rawText) {
+  // Detener scanner
+  stopScanner();
+
+  // Parsear el resultado: puede ser lightning address, bolt11, lnurl, o NWC URL
+  let parsed = parseScanData(rawText);
+
+  // Mostrar resultado
+  const overlay = document.getElementById("scan-success-overlay");
+  const typeEl = document.getElementById("scan-result-type");
+  const addrEl = document.getElementById("scan-result-addr");
+
+  if (overlay) overlay.style.display = "flex";
+  if (typeEl) typeEl.textContent = parsed.typeLabel;
+  if (addrEl) addrEl.textContent = parsed.display;
+
+  window._scanResult = parsed;
+}
+
+function parseScanData(raw) {
+  const text = raw.trim();
+
+  // Lightning invoice (bolt11)
+  if (text.toLowerCase().startsWith("lnbc") || text.toLowerCase().startsWith("lightning:lnbc")) {
+    const invoice = text.replace(/^lightning:/i, "");
+    return { type: "invoice", value: invoice, display: invoice.substring(0, 40) + "...", typeLabel: "LIGHTNING INVOICE" };
+  }
+
+  // LNURL
+  if (text.toLowerCase().startsWith("lnurl") || text.toLowerCase().startsWith("lightning:lnurl")) {
+    const lnurl = text.replace(/^lightning:/i, "");
+    return { type: "lnurl", value: lnurl, display: lnurl.substring(0, 40) + "...", typeLabel: "LNURL" };
+  }
+
+  // NWC URL
+  if (text.startsWith("nostr+walletconnect://")) {
+    return { type: "nwc", value: text, display: text.substring(0, 40) + "...", typeLabel: "NWC WALLET" };
+  }
+
+  // Lightning Address (email-like)
+  if (text.includes("@") && text.includes(".") && !text.includes(" ")) {
+    const addr = text.replace(/^lightning:/i, "");
+    return { type: "address", value: addr, display: addr, typeLabel: "LIGHTNING ADDRESS" };
+  }
+
+  // Bitcoin on-chain address
+  if (/^(bc1|[13])[a-zA-HJ-NP-Z0-9]{25,}$/.test(text) || text.toLowerCase().startsWith("bitcoin:")) {
+    return { type: "bitcoin", value: text, display: text.substring(0, 40) + "...", typeLabel: "BITCOIN ADDRESS" };
+  }
+
+  // Desconocido - intentar usar como destino
+  return { type: "unknown", value: text, display: text.substring(0, 50), typeLabel: "QR ESCANEADO" };
+}
+
 function simulateScan() {
   const addrs = ["pagos@bitcoinbeach.com", "cafe@btcpay.ar", "amigo@walletofsatoshi.com"];
   const picked = addrs[Math.floor(Math.random() * addrs.length)];
-  document.getElementById("scan-idle")?.style.setProperty("display", "none");
-  const overlay = document.getElementById("scan-success-overlay");
-  if (overlay) overlay.classList.add("visible");
-  const addr = document.getElementById("scan-result-addr");
-  if (addr) addr.textContent = picked;
-  window._scanResult = picked;
+  handleScanResult(picked);
 }
 
 function useScanResult() {
-  navTo("s-send");
-  setTimeout(() => {
-    const dest = document.getElementById("send-dest");
-    if (dest) dest.value = window._scanResult || "";
-    document.getElementById("scan-idle")?.style.setProperty("display", "block");
-    document.getElementById("scan-success-overlay")?.classList.remove("visible");
-  }, 100);
+  const result = window._scanResult;
+  if (!result) return;
+
+  stopScanner();
+
+  if (result.type === "invoice") {
+    // Para invoices, ir directo a pagar
+    navTo("s-send");
+    setTimeout(() => {
+      const dest = document.getElementById("send-dest");
+      if (dest) dest.value = result.value;
+    }, 100);
+  } else if (result.type === "nwc") {
+    // NWC URL - conectar wallet
+    ctx.showToast("NWC URL detectada");
+    ctx.setState({ nwcUrl: result.value });
+  } else {
+    // Lightning Address, LNURL u otro - ir a enviar
+    navTo("s-send");
+    setTimeout(() => {
+      const dest = document.getElementById("send-dest");
+      if (dest) dest.value = result.value;
+    }, 100);
+  }
+
+  // Reset scan UI
+  resetScanUI();
+}
+
+function resetScanUI() {
+  const overlay = document.getElementById("scan-success-overlay");
+  const idleEl = document.getElementById("scan-idle");
+  if (overlay) overlay.style.display = "none";
+  if (idleEl) idleEl.style.display = "flex";
 }
 
 // ── DASHBOARD HTML ──
@@ -531,6 +728,8 @@ function getDashboardHTML() {
         <div class="address-card">
           <div class="field-label">Tu Lightning Address</div>
           <div class="address-val">${addr}</div>
+          <div style="background:#fff;padding:12px;display:inline-block;margin:0 auto .8rem;display:flex;justify-content:center" id="address-qr-container"></div>
+          <div style="font-family:var(--font-mono);font-size:.55rem;color:var(--muted);text-align:center;margin-bottom:.8rem">Escaneá para pagar a esta address</div>
           <button class="btn-primary" id="btn-copy-address">Copiar address ⎘</button>
         </div>
       </div>
@@ -592,15 +791,25 @@ function getDashboardHTML() {
       <button data-close style="background:none;border:none;color:var(--muted);font-family:var(--font-mono);font-size:.6rem;cursor:pointer;letter-spacing:.1em">✕ CERRAR</button>
     </div>
     <div class="scan-viewfinder">
-      <div id="scan-idle"><div class="scan-frame"><span></span><div class="scan-line"></div></div></div>
-      <div class="scan-success-overlay" id="scan-success-overlay" style="display:none;position:absolute;inset:0;background:rgba(0,0,0,.85);align-items:center;justify-content:center;flex-direction:column;gap:.8rem;">
-        <div style="font-size:2rem">✓</div>
-        <div id="scan-result-addr" style="font-family:var(--font-mono);font-size:.7rem;color:var(--electric);text-align:center;padding:0 2rem"></div>
-        <button class="btn-primary" style="margin:0 2rem" id="btn-use-scan">Usar esta address</button>
+      <!-- Placeholder antes de iniciar cámara -->
+      <div id="scan-idle" style="display:flex;align-items:center;justify-content:center;flex:1;">
+        <div class="scan-frame"><span></span><div class="scan-line"></div></div>
+      </div>
+      <!-- Container para html5-qrcode -->
+      <div id="qr-reader"></div>
+      <!-- Resultado exitoso -->
+      <div class="scan-success-overlay" id="scan-success-overlay" style="display:none;position:absolute;inset:0;background:rgba(8,8,8,.92);align-items:center;justify-content:center;flex-direction:column;gap:.8rem;z-index:10;">
+        <div style="font-size:2.5rem;margin-bottom:.4rem">✓</div>
+        <div id="scan-result-type" style="font-family:var(--font-mono);font-size:.55rem;letter-spacing:.15em;color:var(--muted);text-transform:uppercase"></div>
+        <div id="scan-result-addr" style="font-family:var(--font-mono);font-size:.72rem;color:var(--electric);text-align:center;padding:0 2rem;word-break:break-all;line-height:1.5"></div>
+        <div style="display:flex;flex-direction:column;gap:.5rem;width:100%;padding:0 2rem;margin-top:.5rem">
+          <button class="btn-primary" id="btn-use-scan">Usar ⚡</button>
+          <button class="btn-secondary" id="btn-scan-again">Escanear otro</button>
+        </div>
       </div>
     </div>
-    <div style="padding:1rem 1.4rem;font-family:var(--font-mono);font-size:.62rem;color:var(--muted);text-align:center;letter-spacing:.08em">Apuntá la cámara al QR</div>
-    <div style="padding:0 1.4rem 1.2rem"><button class="btn-secondary" id="btn-simulate-scan">⚡ Simular escaneo</button></div>
+    <div id="scan-status" style="padding:.8rem 1.4rem;font-family:var(--font-mono);font-size:.62rem;color:var(--muted);text-align:center;letter-spacing:.08em">Apuntá la cámara al código QR</div>
+    <div id="scan-fallback" style="padding:0 1.4rem 1.2rem;display:none"><button class="btn-secondary" id="btn-simulate-scan">⚡ Simular escaneo (sin cámara)</button></div>
   </div>
 
   <!-- SUCCESS -->
@@ -624,7 +833,13 @@ function getDashboardHTML() {
     <div class="screen-body" style="flex:1;overflow-y:auto;padding:.5rem 1.4rem 1.4rem">
       <p class="screen-title">Historial</p>
     </div>
-    <div id="history-body" class="history-body"></div>
+    <div id="history-body" class="history-body">
+      <div class="history-empty">
+        <div style="font-size:2rem;margin-bottom:.8rem;opacity:.4">⚡</div>
+        <div style="font-family:var(--font-display);font-size:1.3rem;margin-bottom:.4rem;color:var(--white)">Sin transacciones</div>
+        <div style="font-family:var(--font-mono);font-size:.6rem;color:var(--muted);line-height:1.6">Enviá o recibí sats para ver<br>tu historial acá.</div>
+      </div>
+    </div>
   </div>
 
   <!-- SETTINGS -->
@@ -651,13 +866,274 @@ function getDashboardHTML() {
           <div class="field-label">NWC Connection String</div>
           <div class="settings-key-val" id="settings-key-val">${nwcUrl}</div>
         </div>
-        <button class="btn-secondary" id="btn-toggle-settings-key" style="margin-bottom:.6rem">Revelar / ocultar clave</button>
+        <div style="display:flex;gap:.5rem">
+          <button class="btn-secondary" id="btn-toggle-settings-key" style="flex:1">Revelar / ocultar</button>
+          <button class="btn-secondary" id="btn-copy-nwc" style="flex:1">Copiar clave ⎘</button>
+        </div>
       </div>
       <div class="settings-section">
         <div class="settings-section-label">App</div>
         <div class="settings-row">
           <span class="settings-row-label">Versión</span>
           <span class="settings-row-val">0.1.0 · Hackathon</span>
+        </div>
+      </div>
+      <div class="settings-section">
+        <button class="btn-secondary" id="btn-reset-wallet" style="color:var(--orange);border-color:rgba(255,107,26,.3);width:100%">Resetear wallet</button>
+        <div style="font-family:var(--font-mono);font-size:.5rem;color:var(--muted);text-align:center;margin-top:.5rem;line-height:1.5">Esto borra tu wallet de este dispositivo.<br>Asegurate de tener tu clave guardada.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RECHARGE: PESOS → SATS -->
+  <div class="screen slide-up" id="s-recharge-pesos">
+    <div class="topbar">
+      <span class="topbar-logo">Sats<span>Party</span></span>
+      <button data-close style="background:none;border:none;color:var(--muted);font-family:var(--font-mono);font-size:.6rem;cursor:pointer;letter-spacing:.1em">← VOLVER</button>
+    </div>
+    <div class="screen-body" style="flex:1;overflow-y:auto;padding:.5rem 1.4rem 1.4rem">
+      <p class="screen-title">Pesos → Sats<br><span style="color:var(--electric)">guía paso a paso.</span></p>
+      <p class="screen-desc">Cómo convertir pesos argentinos a sats vía un exchange local.</p>
+
+      <!-- Step indicators -->
+      <div class="wizard-steps" id="pesos-steps">
+        <div class="wizard-step-dot active" data-step="1">1</div>
+        <div class="wizard-step-line"></div>
+        <div class="wizard-step-dot" data-step="2">2</div>
+        <div class="wizard-step-line"></div>
+        <div class="wizard-step-dot" data-step="3">3</div>
+        <div class="wizard-step-line"></div>
+        <div class="wizard-step-dot" data-step="4">4</div>
+      </div>
+
+      <!-- Step 1: Elegir exchange -->
+      <div class="wizard-card" id="pesos-step-1">
+        <div class="wizard-card-header">
+          <span class="wizard-card-num">01</span>
+          <span class="wizard-card-title">Elegí un exchange</span>
+        </div>
+        <p class="wizard-card-desc">Necesitás una cuenta en un exchange argentino que soporte Lightning Network o retiro de BTC.</p>
+        <div class="wizard-options">
+          <div class="wizard-option">
+            <div class="wizard-option-name" style="color:var(--electric)">Belo</div>
+            <div class="wizard-option-sub">Retiro Lightning directo</div>
+          </div>
+          <div class="wizard-option">
+            <div class="wizard-option-name" style="color:#4FC3F7">Lemon</div>
+            <div class="wizard-option-sub">Exchange popular · Retiro BTC on-chain</div>
+          </div>
+          <div class="wizard-option">
+            <div class="wizard-option-name" style="color:#66BB6A">Buenbit</div>
+            <div class="wizard-option-sub">Depósito CVU · Retiro BTC</div>
+          </div>
+          <div class="wizard-option">
+            <div class="wizard-option-name" style="color:#FF8A65">Ripio</div>
+            <div class="wizard-option-sub">Exchange histórico · Retiro BTC</div>
+          </div>
+        </div>
+        <div class="wizard-tip">
+          <span style="color:var(--electric)">TIP:</span> Belo tiene retiro Lightning nativo, es lo más rápido y barato.
+        </div>
+        <button class="btn-primary" id="pesos-next-1">Siguiente →</button>
+      </div>
+
+      <!-- Step 2: Depositar ARS -->
+      <div class="wizard-card" id="pesos-step-2" style="display:none">
+        <div class="wizard-card-header">
+          <span class="wizard-card-num">02</span>
+          <span class="wizard-card-title">Depositá ARS</span>
+        </div>
+        <p class="wizard-card-desc">Transferí pesos al exchange desde tu banco o billetera virtual.</p>
+        <div class="wizard-info-box">
+          <div class="wizard-info-row">
+            <span class="wizard-info-label">Método</span>
+            <span class="wizard-info-val">Transferencia bancaria / CVU</span>
+          </div>
+          <div class="wizard-info-row">
+            <span class="wizard-info-label">Demora</span>
+            <span class="wizard-info-val" style="color:var(--green)">Inmediato</span>
+          </div>
+          <div class="wizard-info-row">
+            <span class="wizard-info-label">Comisión</span>
+            <span class="wizard-info-val" style="color:var(--green)">$0</span>
+          </div>
+        </div>
+        <div class="wizard-tip">
+          <span style="color:var(--electric)">TIP:</span> Usá Mercado Pago o tu banco. La transferencia a CVU es gratis e inmediata.
+        </div>
+        <div style="display:flex;gap:.5rem">
+          <button class="btn-secondary" id="pesos-prev-2" style="flex:1">← Atrás</button>
+          <button class="btn-primary" id="pesos-next-2" style="flex:1">Siguiente →</button>
+        </div>
+      </div>
+
+      <!-- Step 3: Comprar BTC -->
+      <div class="wizard-card" id="pesos-step-3" style="display:none">
+        <div class="wizard-card-header">
+          <span class="wizard-card-num">03</span>
+          <span class="wizard-card-title">Comprá Bitcoin</span>
+        </div>
+        <p class="wizard-card-desc">Con los ARS depositados, comprá BTC en el exchange.</p>
+        <div class="wizard-info-box">
+          <div class="wizard-info-row">
+            <span class="wizard-info-label">Par</span>
+            <span class="wizard-info-val">BTC/ARS</span>
+          </div>
+          <div class="wizard-info-row">
+            <span class="wizard-info-label">Precio ref.</span>
+            <span class="wizard-info-val" style="color:var(--electric)">~$${Math.round(state.btcUsd * state.usdArs).toLocaleString()} ARS</span>
+          </div>
+          <div class="wizard-info-row">
+            <span class="wizard-info-label">Mínimo</span>
+            <span class="wizard-info-val">~$500 ARS (depende del exchange)</span>
+          </div>
+        </div>
+        <div class="wizard-tip">
+          <span style="color:var(--electric)">TIP:</span> No necesitás comprar 1 BTC entero. Podés comprar fracciones (satoshis).
+        </div>
+        <div style="display:flex;gap:.5rem">
+          <button class="btn-secondary" id="pesos-prev-3" style="flex:1">← Atrás</button>
+          <button class="btn-primary" id="pesos-next-3" style="flex:1">Siguiente →</button>
+        </div>
+      </div>
+
+      <!-- Step 4: Retirar a Lightning -->
+      <div class="wizard-card" id="pesos-step-4" style="display:none">
+        <div class="wizard-card-header">
+          <span class="wizard-card-num">04</span>
+          <span class="wizard-card-title">Retirá a Lightning</span>
+        </div>
+        <p class="wizard-card-desc">Enviá los BTC desde el exchange a tu Lightning Address.</p>
+        <div class="wizard-info-box">
+          <div class="wizard-info-row">
+            <span class="wizard-info-label">Tu address</span>
+            <span class="wizard-info-val" style="color:var(--electric);font-size:.55rem">${addr}</span>
+          </div>
+          <div class="wizard-info-row">
+            <span class="wizard-info-label">Red</span>
+            <span class="wizard-info-val" style="color:var(--electric)">Lightning Network ⚡</span>
+          </div>
+          <div class="wizard-info-row">
+            <span class="wizard-info-label">Demora</span>
+            <span class="wizard-info-val" style="color:var(--green)">~10 segundos</span>
+          </div>
+        </div>
+        <button class="btn-primary" id="btn-copy-addr-pesos" style="margin-bottom:.5rem">Copiar mi Lightning Address ⎘</button>
+        <div class="wizard-tip">
+          <span style="color:var(--electric)">TIP:</span> Si el exchange no soporta Lightning, retirá on-chain a una wallet que haga swap (Muun, Phoenix).
+        </div>
+        <div style="display:flex;gap:.5rem">
+          <button class="btn-secondary" id="pesos-prev-4" style="flex:1">← Atrás</button>
+          <button class="btn-primary" data-close style="flex:1">Listo ⚡</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RECHARGE: USDT → SATS -->
+  <div class="screen slide-up" id="s-recharge-usdt">
+    <div class="topbar">
+      <span class="topbar-logo">Sats<span>Party</span></span>
+      <button data-close style="background:none;border:none;color:var(--muted);font-family:var(--font-mono);font-size:.6rem;cursor:pointer;letter-spacing:.1em">← VOLVER</button>
+    </div>
+    <div class="screen-body" style="flex:1;overflow-y:auto;padding:.5rem 1.4rem 1.4rem">
+      <p class="screen-title">USDT → Sats<br><span style="color:#26a17b">swap automático.</span></p>
+      <p class="screen-desc">Convertí USDT (Tron TRC-20) a sats vía Boltz Exchange. Sin registro, sin KYC.</p>
+
+      <!-- Step indicators -->
+      <div class="wizard-steps" id="usdt-steps">
+        <div class="wizard-step-dot active" data-step="1" style="--dot-color:#26a17b">1</div>
+        <div class="wizard-step-line" style="--line-color:#26a17b"></div>
+        <div class="wizard-step-dot" data-step="2" style="--dot-color:#26a17b">2</div>
+        <div class="wizard-step-line" style="--line-color:#26a17b"></div>
+        <div class="wizard-step-dot" data-step="3" style="--dot-color:#26a17b">3</div>
+      </div>
+
+      <!-- Step 1: Enviar USDT -->
+      <div class="wizard-card" id="usdt-step-1">
+        <div class="wizard-card-header">
+          <span class="wizard-card-num" style="color:#26a17b">01</span>
+          <span class="wizard-card-title">Enviá USDT</span>
+        </div>
+        <p class="wizard-card-desc">Enviá USDT por la red Tron (TRC-20) a la dirección de Boltz Exchange.</p>
+        <div class="wizard-info-box" style="border-color:rgba(38,161,123,.25)">
+          <div class="wizard-info-row">
+            <span class="wizard-info-label">Red</span>
+            <span class="wizard-info-val" style="color:#26a17b">Tron (TRC-20)</span>
+          </div>
+          <div class="wizard-info-row">
+            <span class="wizard-info-label">Dirección</span>
+            <span class="wizard-info-val" style="color:#26a17b;font-size:.5rem;word-break:break-all">TQn9Y2khEsLJW1ChVWFMSMeRDow5KcbLSE</span>
+          </div>
+          <div class="wizard-info-row">
+            <span class="wizard-info-label">Mínimo</span>
+            <span class="wizard-info-val">~$10 USDT</span>
+          </div>
+        </div>
+        <button class="btn-primary" id="btn-copy-boltz-addr" style="margin-bottom:.5rem;background:rgba(38,161,123,.15);border-color:#26a17b;color:#26a17b">Copiar dirección Boltz ⎘</button>
+        <div class="wizard-tip" style="border-left-color:#26a17b">
+          <span style="color:#26a17b">IMPORTANTE:</span> Usá SOLO la red TRC-20 (Tron). Otras redes no funcionan.
+        </div>
+        <button class="btn-primary" id="usdt-next-1" style="background:rgba(38,161,123,.15);border-color:#26a17b;color:#26a17b">Siguiente →</button>
+      </div>
+
+      <!-- Step 2: Swap automático -->
+      <div class="wizard-card" id="usdt-step-2" style="display:none">
+        <div class="wizard-card-header">
+          <span class="wizard-card-num" style="color:#26a17b">02</span>
+          <span class="wizard-card-title">Swap automático</span>
+        </div>
+        <p class="wizard-card-desc">Boltz Exchange convierte tus USDT a BTC y los envía por Lightning Network automáticamente.</p>
+        <div class="wizard-info-box" style="border-color:rgba(38,161,123,.25)">
+          <div class="wizard-info-row">
+            <span class="wizard-info-label">Proceso</span>
+            <span class="wizard-info-val">Automático (atomic swap)</span>
+          </div>
+          <div class="wizard-info-row">
+            <span class="wizard-info-label">Demora</span>
+            <span class="wizard-info-val" style="color:var(--green)">~1-5 minutos</span>
+          </div>
+          <div class="wizard-info-row">
+            <span class="wizard-info-label">Fee</span>
+            <span class="wizard-info-val">~0.5%</span>
+          </div>
+          <div class="wizard-info-row">
+            <span class="wizard-info-label">KYC</span>
+            <span class="wizard-info-val" style="color:var(--green)">No requiere</span>
+          </div>
+        </div>
+        <div class="wizard-tip" style="border-left-color:#26a17b">
+          <span style="color:#26a17b">NOTA:</span> El swap es trustless — usa contratos atómicos. No necesitás confiar en Boltz.
+        </div>
+        <div style="display:flex;gap:.5rem">
+          <button class="btn-secondary" id="usdt-prev-2" style="flex:1">← Atrás</button>
+          <button class="btn-primary" id="usdt-next-2" style="flex:1;background:rgba(38,161,123,.15);border-color:#26a17b;color:#26a17b">Siguiente →</button>
+        </div>
+      </div>
+
+      <!-- Step 3: Recibir sats -->
+      <div class="wizard-card" id="usdt-step-3" style="display:none">
+        <div class="wizard-card-header">
+          <span class="wizard-card-num" style="color:#26a17b">03</span>
+          <span class="wizard-card-title">Recibí tus sats</span>
+        </div>
+        <p class="wizard-card-desc">Los sats llegan directo a tu wallet SatsParty vía Lightning Network.</p>
+        <div class="wizard-info-box" style="border-color:rgba(38,161,123,.25)">
+          <div class="wizard-info-row">
+            <span class="wizard-info-label">Destino</span>
+            <span class="wizard-info-val" style="color:var(--electric);font-size:.55rem">${addr}</span>
+          </div>
+          <div class="wizard-info-row">
+            <span class="wizard-info-label">Conversión aprox.</span>
+            <span class="wizard-info-val" style="color:var(--electric)">1 USDT ≈ ${Math.round(100_000_000 / state.btcUsd).toLocaleString()} sats</span>
+          </div>
+        </div>
+        <div class="wizard-tip" style="border-left-color:#26a17b">
+          <span style="color:#26a17b">TIP:</span> Podés verificar el estado del swap en boltz.exchange con tu dirección.
+        </div>
+        <div style="display:flex;gap:.5rem">
+          <button class="btn-secondary" id="usdt-prev-3" style="flex:1">← Atrás</button>
+          <button class="btn-primary" data-close style="flex:1;background:rgba(38,161,123,.15);border-color:#26a17b;color:#26a17b">Listo ⚡</button>
         </div>
       </div>
     </div>
@@ -691,11 +1167,57 @@ function getDashboardHTML() {
 
 // ── HELPERS ──
 
+function copyToClipboard(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => {
+      ctx.showToast("Copiado al portapapeles ✓");
+    }).catch(() => {
+      fallbackCopy(text);
+    });
+  } else {
+    fallbackCopy(text);
+  }
+}
+
+function fallbackCopy(text) {
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.cssText = "position:fixed;left:-9999px";
+  document.body.appendChild(ta);
+  ta.select();
+  document.execCommand("copy");
+  document.body.removeChild(ta);
+  ctx.showToast("Copiado al portapapeles ✓");
+}
+
 function onClick(id, handler) {
   setTimeout(() => {
     const el = document.getElementById(id);
     if (el) el.addEventListener("click", handler);
   }, 10);
+}
+
+// ── WIZARD HELPERS ──
+
+function wizardStep(prefix, step, total) {
+  // Hide all steps
+  for (let i = 1; i <= total; i++) {
+    const el = document.getElementById(`${prefix}-step-${i}`);
+    if (el) el.style.display = i === step ? "block" : "none";
+  }
+  // Update step dots
+  const stepsContainer = document.getElementById(`${prefix}-steps`);
+  if (stepsContainer) {
+    stepsContainer.querySelectorAll(".wizard-step-dot").forEach((dot) => {
+      const s = parseInt(dot.dataset.step);
+      dot.classList.toggle("active", s === step);
+      dot.classList.toggle("done", s < step);
+    });
+  }
+}
+
+function resetWizard(prefix, total) {
+  wizardStep(prefix, 1, total);
 }
 
 function activateMission() {}

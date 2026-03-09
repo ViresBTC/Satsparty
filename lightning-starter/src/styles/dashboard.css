@@ -153,6 +153,26 @@
 .scan-line { position: absolute; left: 0; right: 0; height: 2px; background: var(--electric); opacity: .7; animation: scanMove 2s ease-in-out infinite; }
 @keyframes scanMove { 0%,100%{top:10%} 50%{top:90%} }
 
+/* QR Reader (html5-qrcode) */
+#qr-reader { width: 100%; height: 100%; position: absolute; inset: 0; }
+#qr-reader video { width: 100% !important; height: 100% !important; object-fit: cover !important; border: none !important; }
+#qr-reader img[alt="Info icon"] { display: none !important; }
+#qr-reader__scan_region { min-height: auto !important; }
+#qr-reader__scan_region > br { display: none !important; }
+#qr-reader__dashboard { display: none !important; }
+#qr-reader__header_message { display: none !important; }
+/* Ocultar elementos UI internos de la librería */
+#qr-reader > div:last-child { display: none !important; }
+#qr-shaded-region { border-color: var(--electric) !important; }
+
+.scan-success-overlay {
+  animation: scanFadeIn .3s ease;
+}
+@keyframes scanFadeIn {
+  from { opacity: 0; transform: scale(.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
 /* HISTORY */
 .history-body { flex: 1; overflow-y: auto; padding: 0 1.4rem 1.4rem; }
 .history-body::-webkit-scrollbar { width: 0; }
@@ -168,6 +188,7 @@
 .tx-amount { font-family: var(--font-mono); font-size: .7rem; font-weight: 700; }
 .tx-amount.in  { color: var(--green); }
 .tx-amount.out { color: var(--orange); }
+.history-empty { text-align: center; padding: 4rem 1rem 2rem; }
 
 /* SETTINGS */
 .settings-section { margin-bottom: 1.4rem; }
@@ -196,3 +217,108 @@
 .inv-cur-btn.active { background: rgba(247,255,0,.1); border-color: var(--electric); color: var(--electric); }
 .invoice-result { display: none; background: var(--dim); border: 1px solid rgba(247,255,0,.2); padding: 1rem; margin-top: .8rem; text-align: center; }
 .invoice-amount-display { font-family: var(--font-display); font-size: 1.8rem; color: var(--electric); margin-bottom: .3rem; }
+
+/* ═══════════════════════════════════════
+   RECHARGE WIZARDS
+   ═══════════════════════════════════════ */
+
+/* Step indicators */
+.wizard-steps {
+  display: flex; align-items: center; gap: 0;
+  margin-bottom: 1.4rem; padding: 0 .5rem;
+}
+.wizard-step-dot {
+  width: 28px; height: 28px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-mono); font-size: .6rem; font-weight: 700;
+  background: var(--dim); border: 1px solid var(--mid);
+  color: var(--muted); transition: all .3s; flex-shrink: 0;
+}
+.wizard-step-dot.active {
+  background: rgba(247,255,0,.15); border-color: var(--electric); color: var(--electric);
+}
+.wizard-step-dot.done {
+  background: rgba(247,255,0,.08); border-color: rgba(247,255,0,.3); color: rgba(247,255,0,.5);
+}
+/* USDT color variant */
+.wizard-step-dot[style*="--dot-color"].active {
+  background: rgba(38,161,123,.15); border-color: #26a17b; color: #26a17b;
+}
+.wizard-step-dot[style*="--dot-color"].done {
+  background: rgba(38,161,123,.08); border-color: rgba(38,161,123,.3); color: rgba(38,161,123,.5);
+}
+.wizard-step-line {
+  flex: 1; height: 1px; background: var(--mid);
+}
+
+/* Card */
+.wizard-card {
+  background: var(--dim); border: 1px solid var(--mid);
+  padding: 1.2rem; margin-bottom: 1rem;
+  animation: wizardFadeIn .3s ease;
+}
+@keyframes wizardFadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.wizard-card-header {
+  display: flex; align-items: baseline; gap: .6rem; margin-bottom: .7rem;
+}
+.wizard-card-num {
+  font-family: var(--font-display); font-size: 1.6rem;
+  color: var(--electric); line-height: 1;
+}
+.wizard-card-title {
+  font-family: var(--font-display); font-size: 1.3rem;
+  color: var(--white); line-height: 1;
+}
+.wizard-card-desc {
+  font-size: .78rem; color: var(--muted); line-height: 1.6;
+  margin-bottom: 1rem;
+}
+
+/* Options list */
+.wizard-options {
+  display: flex; flex-direction: column; gap: .4rem;
+  margin-bottom: 1rem;
+}
+.wizard-option {
+  padding: .65rem .8rem; background: rgba(255,255,255,.02);
+  border: 1px solid rgba(255,255,255,.06); transition: border-color .2s;
+}
+.wizard-option:hover { border-color: rgba(247,255,0,.2); }
+.wizard-option-name {
+  font-family: var(--font-display); font-size: .95rem; margin-bottom: .1rem;
+}
+.wizard-option-sub {
+  font-family: var(--font-mono); font-size: .52rem; color: var(--muted);
+  letter-spacing: .05em;
+}
+
+/* Info box */
+.wizard-info-box {
+  border: 1px solid rgba(247,255,0,.15); padding: .8rem;
+  margin-bottom: 1rem; background: rgba(247,255,0,.02);
+}
+.wizard-info-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: .4rem 0; border-bottom: 1px solid rgba(255,255,255,.04);
+}
+.wizard-info-row:last-child { border-bottom: none; }
+.wizard-info-label {
+  font-family: var(--font-mono); font-size: .55rem;
+  color: var(--muted); letter-spacing: .08em; text-transform: uppercase;
+}
+.wizard-info-val {
+  font-family: var(--font-mono); font-size: .62rem; color: var(--white);
+  text-align: right;
+}
+
+/* Tip box */
+.wizard-tip {
+  font-family: var(--font-mono); font-size: .58rem;
+  color: var(--muted); line-height: 1.6;
+  padding: .6rem .8rem; margin-bottom: 1rem;
+  border-left: 2px solid var(--electric);
+  background: rgba(247,255,0,.02);
+}
