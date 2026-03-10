@@ -5,21 +5,22 @@
 /* DASHBOARD HERO */
 .dash-hero { padding: 1rem 1.4rem 0; flex-shrink: 0; }
 .dash-address-pill {
-  display: inline-flex; align-items: center; gap: .4rem;
-  background: rgba(247,255,0,.05);
-  border: 1px solid rgba(247,255,0,.15);
-  border-radius: 20px;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  padding: .35rem .8rem; font-family: var(--font-mono);
-  font-size: .6rem; color: var(--electric); margin-bottom: 1.2rem;
+  display: inline-flex; align-items: center; gap: .5rem;
+  background: rgba(247,255,0,.07);
+  border: 1px solid rgba(247,255,0,.2);
+  border-radius: 24px;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  padding: .55rem 1.2rem; font-family: var(--font-address);
+  font-size: .88rem; font-weight: 300; letter-spacing: .06em;
+  color: var(--electric); margin-bottom: 1.2rem;
   cursor: pointer; transition: background .2s, border-color .2s, box-shadow .2s;
-  box-shadow: 0 2px 10px rgba(247,255,0,.04);
+  box-shadow: 0 2px 12px rgba(247,255,0,.06), inset 0 0 0 0 rgba(247,255,0,0);
 }
 .dash-address-pill:hover {
-  border-color: rgba(247,255,0,.35);
-  background: rgba(247,255,0,.08);
-  box-shadow: 0 4px 16px rgba(247,255,0,.08);
+  border-color: rgba(247,255,0,.4);
+  background: rgba(247,255,0,.1);
+  box-shadow: 0 4px 20px rgba(247,255,0,.1), inset 0 0 12px rgba(247,255,0,.03);
 }
 
 .dash-balance-wrap { margin-bottom: 1.8rem; }
