@@ -13,7 +13,7 @@
   -webkit-backdrop-filter: blur(12px);
   padding: .35rem .8rem; font-family: var(--font-mono);
   font-size: .6rem; color: var(--electric); margin-bottom: 1.2rem;
-  cursor: pointer; transition: all .2s;
+  cursor: pointer; transition: background .2s, border-color .2s, box-shadow .2s;
   box-shadow: 0 2px 10px rgba(247,255,0,.04);
 }
 .dash-address-pill:hover {
@@ -172,7 +172,7 @@
   border-radius: 12px;
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  transition: all .2s;
+  transition: transform .2s, background .2s, border-color .2s, box-shadow .2s;
 }
 .recharge-banner:active { transform: scale(.97); }
 .recharge-banner::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; }
@@ -216,7 +216,7 @@
   cursor: pointer; color: var(--muted);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  transition: all .2s;
+  transition: background .2s, border-color .2s, box-shadow .2s, color .2s;
   border-radius: 10px;
 }
 .tab.active {
@@ -391,7 +391,7 @@
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   font-family: var(--font-mono); font-size: .6rem;
-  letter-spacing: .1em; cursor: pointer; transition: all .2s;
+  letter-spacing: .1em; cursor: pointer; transition: background .2s, border-color .2s, box-shadow .2s, color .2s;
 }
 .inv-cur-btn.active {
   background: rgba(247,255,0,.1); border-color: rgba(247,255,0,.3); color: var(--electric);
@@ -426,7 +426,7 @@
   border: 1px solid rgba(255,255,255,.1);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  color: var(--muted); transition: all .3s; flex-shrink: 0;
+  color: var(--muted); transition: background .3s, border-color .3s, color .3s, box-shadow .3s; flex-shrink: 0;
   box-shadow: 0 2px 8px rgba(0,0,0,.1);
 }
 .wizard-step-dot.active {
@@ -495,7 +495,7 @@
   border-radius: 10px;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  transition: all .2s;
+  transition: background .2s, border-color .2s, box-shadow .2s;
   box-shadow: 0 2px 10px rgba(0,0,0,.08), inset 0 1px 0 rgba(255,255,255,.03);
   cursor: pointer;
 }
