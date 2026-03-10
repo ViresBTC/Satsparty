@@ -45,6 +45,9 @@ async function initDashboard() {
 }
 
 function setupDashboardEvents() {
+  // Light ripple effect on action buttons
+  setupLightRipple();
+
   // Navigation
   onClick("nav-home", () => navTo("s-dashboard"));
   onClick("nav-history", () => {
@@ -1212,6 +1215,68 @@ function getDashboardHTML() {
 }
 
 // ── HELPERS ──
+
+function setupLightRipple() {
+  document.querySelectorAll(".action-btn").forEach((btn) => {
+    const getColor = (el) => {
+      if (el.classList.contains("recv")) return "rgba(247,255,0,.25)";
+      if (el.classList.contains("send")) return "rgba(255,255,255,.18)";
+      return "rgba(255,255,255,.12)";
+    };
+
+    const startRipple = (x, y) => {
+      // Remove any existing ripple
+      btn.querySelectorAll(".light-ripple").forEach((r) => r.remove());
+
+      const rect = btn.getBoundingClientRect();
+      const localX = x - rect.left;
+      const localY = y - rect.top;
+
+      // Size = 2x the max distance to any corner
+      const maxDist = Math.max(
+        Math.hypot(localX, localY),
+        Math.hypot(rect.width - localX, localY),
+        Math.hypot(localX, rect.height - localY),
+        Math.hypot(rect.width - localX, rect.height - localY)
+      );
+      const size = maxDist * 2.5;
+      const color = getColor(btn);
+
+      const ripple = document.createElement("div");
+      ripple.className = "light-ripple";
+      ripple.style.cssText = `
+        left:${localX}px;top:${localY}px;
+        width:${size}px;height:${size}px;
+        background:radial-gradient(circle, ${color} 0%, transparent 70%);
+      `;
+      btn.appendChild(ripple);
+
+      // Force reflow then expand
+      ripple.offsetWidth;
+      ripple.classList.add("expanding");
+    };
+
+    const endRipple = () => {
+      btn.querySelectorAll(".light-ripple.expanding").forEach((r) => {
+        r.classList.add("fading");
+        setTimeout(() => r.remove(), 400);
+      });
+    };
+
+    // Mouse
+    btn.addEventListener("mousedown", (e) => startRipple(e.clientX, e.clientY));
+    btn.addEventListener("mouseup", endRipple);
+    btn.addEventListener("mouseleave", endRipple);
+
+    // Touch
+    btn.addEventListener("touchstart", (e) => {
+      const t = e.touches[0];
+      startRipple(t.clientX, t.clientY);
+    }, { passive: true });
+    btn.addEventListener("touchend", endRipple);
+    btn.addEventListener("touchcancel", endRipple);
+  });
+}
 
 function copyToClipboard(text) {
   if (navigator.clipboard && navigator.clipboard.writeText) {
