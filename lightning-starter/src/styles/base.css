@@ -16,6 +16,7 @@
   --font-display: 'Bebas Neue', sans-serif;
   --font-body: 'DM Sans', sans-serif;
   --font-mono: 'Space Mono', monospace;
+  --font-address: 'Outfit', sans-serif;
 }
 
 html, body {
@@ -230,7 +231,7 @@ body::after {
   cursor: pointer;
   border: none;
   border-radius: 14px;
-  transition: all 0.25s cubic-bezier(.4,0,.2,1);
+  transition: transform .25s cubic-bezier(.4,0,.2,1), background .25s, border-color .25s, box-shadow .25s, color .25s;
   width: 100%;
   position: relative;
   overflow: hidden;
@@ -322,7 +323,7 @@ body::after {
     0 4px 24px rgba(247,255,0,.08),
     0 0 1px rgba(247,255,0,.3),
     inset 0 1px 0 rgba(247,255,0,.12);
-  transition: all .25s cubic-bezier(.4,0,.2,1);
+  transition: transform .25s cubic-bezier(.4,0,.2,1), background .25s, border-color .25s, box-shadow .25s;
   position: relative; overflow: hidden;
 }
 .btn-primary::after {
@@ -357,7 +358,7 @@ body::after {
     0 4px 20px rgba(0,0,0,.15),
     0 0 1px rgba(255,255,255,.1),
     inset 0 1px 0 rgba(255,255,255,.05);
-  transition: all .25s cubic-bezier(.4,0,.2,1);
+  transition: transform .25s cubic-bezier(.4,0,.2,1), background .25s, border-color .25s, box-shadow .25s, color .25s;
   position: relative; overflow: hidden;
 }
 .btn-secondary::after {
@@ -448,7 +449,7 @@ body::after {
   font-weight: 700;
   padding: 0.8rem 1.5rem;
   opacity: 0;
-  transition: all 0.3s ease;
+  transition: opacity 0.3s ease, transform 0.3s ease;
   z-index: 600;
   white-space: nowrap;
   box-shadow: 0 8px 32px rgba(247,255,0,.1), inset 0 1px 0 rgba(247,255,0,.1);
