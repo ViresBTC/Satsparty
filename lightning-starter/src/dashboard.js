@@ -11,6 +11,7 @@ import { Html5Qrcode } from "html5-qrcode";
 let ctx = {};
 let currentView = "s-dashboard";
 let currencyIdx = 0;
+let sendCurIdx = 0; // 0=SATS, 1=USD, 2=ARS
 let qrScanner = null;
 
 export function renderDashboard(app, context) {
@@ -167,6 +168,20 @@ function setupDashboardEvents() {
   if (destInput) destInput.addEventListener("input", updateSendPreview);
   if (amtInput) amtInput.addEventListener("input", updateSendPreview);
 
+  // Send currency toggle
+  onClick("send-cur-sats", () => setSendCurrency(0));
+  onClick("send-cur-usd", () => setSendCurrency(1));
+  onClick("send-cur-ars", () => setSendCurrency(2));
+
+  // Paste button
+  onClick("btn-paste-dest", async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      const dest = document.getElementById("send-dest");
+      if (dest && text) { dest.value = text.trim(); updateSendPreview(); }
+    } catch { ctx.showToast("No se pudo pegar"); }
+  });
+
   // Invoice currency toggle
   onClick("icur-sats", () => setInvoiceCurrency("sats"));
   onClick("icur-usd", () => setInvoiceCurrency("usd"));
@@ -241,26 +256,31 @@ function cycleCurrency() {
   const balEl = document.getElementById("dash-balance");
   const unitEl = document.getElementById("balance-unit");
   const fiatEl = document.getElementById("dash-fiat");
-  const btcEl = document.getElementById("btc-symbol");
+  const balRow = document.getElementById("dash-balance-row");
 
+  const satPrice = (state.btcUsd / 100_000_000);
+
+  // Update values — ₿ is part of the text, no separate element
   if (currencyIdx === 0) {
-    if (balEl) balEl.textContent = state.balance;
+    if (balEl) balEl.textContent = "₿" + state.balance;
     if (unitEl) unitEl.textContent = "SATS";
-    if (fiatEl) fiatEl.innerHTML = '<span style="opacity:.4;font-size:.6rem">Tocá para cambiar moneda</span>';
-    if (btcEl) btcEl.style.opacity = "1";
+    if (fiatEl) fiatEl.innerHTML = '<span style="opacity:.4">Tocá para cambiar moneda</span>';
   } else if (currencyIdx === 1) {
     const usd = ctx.satsToUsd(state.balance).toFixed(4);
     if (balEl) balEl.textContent = "$" + usd;
     if (unitEl) unitEl.textContent = "USD";
-    if (fiatEl) fiatEl.innerHTML = `<span style="color:var(--green)">1 sat ≈ $${(state.btcUsd / 100_000_000).toFixed(6)} USD</span>`;
-    if (btcEl) btcEl.style.opacity = "0";
+    if (fiatEl) fiatEl.innerHTML = `<span style="color:var(--green)">1 sat ≈ $${satPrice.toFixed(6)} USD</span>`;
   } else {
     const ars = Math.round(ctx.satsToArs(state.balance)).toLocaleString();
+    const satArs = (satPrice * state.usdArs).toFixed(4);
     if (balEl) balEl.textContent = "$" + ars;
     if (unitEl) unitEl.textContent = "ARS";
-    if (fiatEl) fiatEl.innerHTML = `<span style="color:var(--orange)">1 USD = $${state.usdArs.toLocaleString()} ARS</span>`;
-    if (btcEl) btcEl.style.opacity = "0";
+    if (fiatEl) fiatEl.innerHTML = `<span style="color:var(--orange)">1 sat ≈ $${satArs} ARS</span>`;
   }
+
+  // Trigger fade-in AFTER values are set
+  if (balRow) { balRow.classList.remove("bal-animate"); void balRow.offsetWidth; balRow.classList.add("bal-animate"); }
+  if (fiatEl) { fiatEl.classList.remove("fiat-animate"); void fiatEl.offsetWidth; fiatEl.classList.add("fiat-animate"); }
 }
 
 // ── HISTORY ──
@@ -485,17 +505,62 @@ async function pollInvoice(paymentHash, sats) {
 
 // ── SEND ──
 
+const SEND_CURRENCIES = ["SATS", "USD", "ARS"];
+
+function setSendCurrency(idx) {
+  sendCurIdx = idx;
+  const ids = ["send-cur-sats", "send-cur-usd", "send-cur-ars"];
+  ids.forEach((id, i) => {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle("active", i === idx);
+  });
+  const label = document.getElementById("send-cur-label");
+  if (label) label.textContent = SEND_CURRENCIES[idx];
+  updateSendPreview();
+}
+
+function getSendAmountInSats() {
+  const raw = parseFloat(document.getElementById("send-amount")?.value) || 0;
+  if (raw <= 0) return 0;
+  if (sendCurIdx === 0) return Math.round(raw);         // already sats
+  if (sendCurIdx === 1) return ctx.usdToSats(raw);      // USD → sats
+  return ctx.arsToSats(raw);                              // ARS → sats
+}
+
 function updateSendPreview() {
   const dest = document.getElementById("send-dest")?.value;
-  const amt = document.getElementById("send-amount")?.value;
+  const raw = parseFloat(document.getElementById("send-amount")?.value) || 0;
   const preview = document.getElementById("send-preview");
-  if (!preview) return;
+  const convEl = document.getElementById("send-conversion");
+  const state = ctx.getState();
+  const satPrice = state.btcUsd / 100_000_000;
 
-  if (dest && amt > 0) {
+  // Update conversion line
+  if (convEl && raw > 0) {
+    const sats = getSendAmountInSats();
+    if (sendCurIdx === 0) {
+      const usd = ctx.satsToUsd(sats).toFixed(4);
+      const ars = Math.round(ctx.satsToArs(sats)).toLocaleString();
+      convEl.innerHTML = `<span style="color:var(--green)">≈ $${usd} USD</span> · <span style="color:var(--orange)">$${ars} ARS</span>`;
+    } else if (sendCurIdx === 1) {
+      const ars = Math.round(ctx.satsToArs(sats)).toLocaleString();
+      convEl.innerHTML = `<span style="color:var(--electric)">≈ ${sats.toLocaleString()} sats</span> · <span style="color:var(--orange)">$${ars} ARS</span>`;
+    } else {
+      const usd = ctx.satsToUsd(sats).toFixed(4);
+      convEl.innerHTML = `<span style="color:var(--electric)">≈ ${sats.toLocaleString()} sats</span> · <span style="color:var(--green)">$${usd} USD</span>`;
+    }
+  } else if (convEl) {
+    convEl.innerHTML = "";
+  }
+
+  // Update preview card
+  if (!preview) return;
+  if (dest && raw > 0) {
     preview.classList.add("visible");
+    const sats = getSendAmountInSats();
     const previewAmt = document.getElementById("preview-amount");
     const previewDest = document.getElementById("preview-dest");
-    if (previewAmt) previewAmt.textContent = parseInt(amt).toLocaleString() + " sats";
+    if (previewAmt) previewAmt.textContent = sats.toLocaleString() + " sats";
     if (previewDest) previewDest.textContent = dest;
   } else {
     preview.classList.remove("visible");
@@ -504,11 +569,11 @@ function updateSendPreview() {
 
 async function confirmSend() {
   const dest = document.getElementById("send-dest")?.value?.trim();
-  const amt = parseInt(document.getElementById("send-amount")?.value) || 0;
+  const sats = getSendAmountInSats();
   const state = ctx.getState();
 
-  if (!dest || amt <= 0) { ctx.showToast("Completá el formulario"); return; }
-  if (amt > state.balance) { ctx.showToast("Saldo insuficiente"); return; }
+  if (!dest || sats <= 0) { ctx.showToast("Completá el formulario"); return; }
+  if (sats > state.balance) { ctx.showToast("Saldo insuficiente"); return; }
 
   const btn = document.getElementById("btn-send-confirm");
   if (btn) { btn.disabled = true; btn.textContent = "⚡ Enviando..."; }
@@ -518,27 +583,27 @@ async function confirmSend() {
       // Resolve Lightning Address to invoice
       const ln = new LightningAddress(dest);
       await ln.fetch();
-      const invoice = await ln.requestInvoice({ satoshi: amt });
+      const invoice = await ln.requestInvoice({ satoshi: sats });
 
       // Pay invoice
       await ctx.nwcService.payInvoice(invoice.paymentRequest);
     }
 
     // Update state
-    const newBalance = state.balance - amt;
+    const newBalance = state.balance - sats;
     ctx.setState({ balance: newBalance });
 
     // Show success
     const successAmt = document.getElementById("success-amount");
     const successTo = document.getElementById("success-to");
     const successBal = document.getElementById("success-new-balance");
-    if (successAmt) successAmt.textContent = amt.toLocaleString();
+    if (successAmt) successAmt.textContent = sats.toLocaleString();
     if (successTo) successTo.textContent = "→ " + dest;
     if (successBal) successBal.textContent = newBalance + " sats";
 
     // Update dashboard balance
     const dashBal = document.getElementById("dash-balance");
-    if (dashBal) dashBal.textContent = newBalance;
+    if (dashBal) dashBal.textContent = "₿" + newBalance;
 
     navTo("s-success");
     ctx.launchConfetti();
@@ -550,6 +615,8 @@ async function confirmSend() {
     if (destInput) destInput.value = "";
     if (amtInput) amtInput.value = "";
     document.getElementById("send-preview")?.classList.remove("visible");
+    document.getElementById("send-conversion").innerHTML = "";
+    setSendCurrency(0);
   } catch (err) {
     ctx.showToast("Error: " + err.message);
     if (btn) { btn.disabled = false; btn.textContent = "Confirmar envío ⚡"; }
@@ -739,11 +806,8 @@ function getDashboardHTML() {
       <div class="dash-balance-wrap">
         <div class="dash-balance-label">Tu saldo</div>
         <div class="dash-balance-row" id="dash-balance-row" style="cursor:pointer">
-          <div class="dash-balance-num" id="dash-balance">${balance}</div>
-          <div style="display:flex;flex-direction:column;justify-content:flex-end;padding-bottom:.4rem;gap:.15rem">
-            <span id="btc-symbol" style="font-family:Georgia,serif;font-size:3.2rem;color:var(--white);line-height:1;transition:opacity .2s">₿</span>
-            <div class="dash-balance-unit" id="balance-unit">SATS</div>
-          </div>
+          <div class="dash-balance-num" id="dash-balance">₿${balance}</div>
+          <div class="dash-balance-unit" id="balance-unit" style="align-self:flex-end;padding-bottom:.6rem">SATS</div>
         </div>
         <div class="dash-balance-fiat" id="dash-fiat">
           <span style="opacity:.4;font-size:.6rem">Tocá para cambiar moneda</span>
@@ -823,10 +887,22 @@ function getDashboardHTML() {
     </div>
     <div class="screen-body" style="flex:1;overflow-y:auto;padding:.5rem 1.4rem 1.4rem">
       <p class="screen-title">Enviar<br><span style="color:var(--electric)">sats.</span></p>
-      <div class="field-label">Destino (Lightning Address)</div>
-      <input class="field-input" type="text" id="send-dest" placeholder="nombre@dominio.com"/>
-      <div class="field-label">Monto (sats)</div>
-      <input class="field-input" type="number" id="send-amount" placeholder="0" inputmode="numeric"/>
+      <div class="field-label">Destino (Lightning Address o Invoice)</div>
+      <div class="send-dest-row">
+        <input class="field-input" type="text" id="send-dest" placeholder="nombre@dominio.com o lnbc1..." style="margin-bottom:0;flex:1"/>
+        <button class="btn-paste" id="btn-paste-dest">📋 Pegar</button>
+      </div>
+      <div class="field-label" style="margin-top:1rem">Monto</div>
+      <div style="display:flex;gap:0;margin-bottom:.8rem">
+        <button class="inv-cur-btn active" id="send-cur-sats">SATS</button>
+        <button class="inv-cur-btn" id="send-cur-usd">USD</button>
+        <button class="inv-cur-btn" id="send-cur-ars">ARS</button>
+      </div>
+      <div style="position:relative;margin-bottom:.3rem">
+        <input class="field-input" type="text" id="send-amount" placeholder="0" inputmode="decimal" style="padding-right:3.5rem;font-family:var(--font-display);font-size:1.6rem;margin-bottom:0"/>
+        <span id="send-cur-label" style="position:absolute;right:1rem;top:50%;transform:translateY(-50%);font-family:var(--font-mono);font-size:.65rem;color:var(--muted);pointer-events:none">SATS</span>
+      </div>
+      <div id="send-conversion" style="font-family:var(--font-mono);font-size:.62rem;color:var(--muted);margin-bottom:1rem;min-height:1.2rem;padding:.4rem .2rem"></div>
       <div class="send-preview" id="send-preview">
         <div class="send-preview-row" style="margin-bottom:.4rem">
           <span class="send-preview-label">Enviás</span>

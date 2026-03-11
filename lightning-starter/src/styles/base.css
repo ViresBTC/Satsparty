@@ -526,7 +526,7 @@ body::after {
 .field-label {
   font-family: var(--font-mono); font-size: .58rem;
   letter-spacing: .1em; text-transform: uppercase;
-  color: var(--muted); margin-bottom: .4rem;
+  color: var(--white); margin-bottom: .4rem;
 }
 .field-input {
   width: 100%;

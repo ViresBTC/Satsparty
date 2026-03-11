@@ -33,16 +33,28 @@
 .dash-balance-num {
   font-family: var(--font-display); font-size: 3.8rem;
   line-height: 1; color: var(--white); cursor: pointer;
-  transition: opacity .2s;
 }
 .dash-balance-unit {
   font-family: var(--font-mono); font-size: .7rem;
-  letter-spacing: .1em; color: var(--muted); text-transform: uppercase;
+  letter-spacing: .1em; color: var(--white); text-transform: uppercase;
 }
 .dash-balance-fiat {
-  font-family: var(--font-mono); font-size: .65rem;
-  color: var(--muted); margin-top: .3rem; min-height: 1.1rem;
+  font-family: var(--font-address); font-size: .72rem; font-weight: 300;
+  letter-spacing: .03em;
+  color: var(--muted); margin-top: .4rem; min-height: 1.1rem;
 }
+
+/* Balance transition */
+@keyframes balanceFadeIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fiatFadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.bal-animate { animation: balanceFadeIn .3s ease-out; }
+.fiat-animate { animation: fiatFadeIn .25s ease-out .05s both; }
 
 /* ACTIONS */
 .dash-actions {
@@ -246,6 +258,30 @@
 .qr-box { width: 160px; height: 160px; background: var(--white); margin: 0 auto 1rem; display: flex; align-items: center; justify-content: center; padding: 8px; }
 
 /* SEND */
+.send-dest-row {
+  display: flex; gap: .5rem; align-items: stretch; margin-bottom: 0;
+}
+.btn-paste {
+  flex-shrink: 0; padding: 0 .8rem;
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 10px; color: var(--white);
+  font-family: var(--font-mono); font-size: .6rem;
+  letter-spacing: .05em; cursor: pointer;
+  transition: background .2s, border-color .2s;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  white-space: nowrap;
+}
+.btn-paste:hover {
+  background: rgba(247,255,0,.08);
+  border-color: rgba(247,255,0,.3);
+}
+/* Hide number input spinners */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+input[type=number] { -moz-appearance: textfield; }
+
 .send-preview {
   background: rgba(255,255,255,.04);
   border: 1px solid rgba(255,255,255,.08);
@@ -392,7 +428,7 @@
   flex: 1; padding: .5rem;
   background: rgba(255,255,255,.04);
   border: 1px solid rgba(255,255,255,.08);
-  color: var(--muted);
+  color: var(--white);
   border-radius: 8px;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
