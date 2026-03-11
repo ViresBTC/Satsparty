@@ -6,7 +6,7 @@
  */
 
 import * as nwcService from "./services/nwc.js";
-import { loadState, getState, setState, satsToUsd, satsToArs } from "./services/state.js";
+import { loadState, getState, setState, satsToUsd, satsToArs, usdToSats, arsToSats } from "./services/state.js";
 import { generateQRSvg } from "./services/qr.js";
 import { renderOnboarding } from "./onboarding.js";
 import { renderDashboard } from "./dashboard.js";
@@ -71,6 +71,8 @@ function startDashboard() {
     generateQRSvg,
     satsToUsd,
     satsToArs,
+    usdToSats,
+    arsToSats,
     reconnectWallet,
   });
 }
