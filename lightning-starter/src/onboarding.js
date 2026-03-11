@@ -228,7 +228,7 @@ const missionContent = {
           <div class="info-card-icon">📧</div>
           <div class="info-card-content">
             <div class="info-card-label">Tu dirección</div>
-            <div class="info-card-value electric" style="font-size:0.7rem">${addr}</div>
+            <div class="info-card-value electric ln-addr">${addr}</div>
           </div>
         </div>
         <button class="btn btn-dim" style="margin-bottom:0.6rem" onclick="document.dispatchEvent(new CustomEvent('copy-address'))">Copiar dirección</button>
@@ -492,7 +492,7 @@ function getOnboardingHTML() {
           <div class="info-card-icon">📧</div>
           <div class="info-card-content">
             <div class="info-card-label">Tu Lightning Address</div>
-            <div class="info-card-value electric" id="created-address">wallet@satsparty.app</div>
+            <div class="info-card-value electric ln-addr" id="created-address">wallet@satsparty.app</div>
           </div>
         </div>
         <div class="info-card">
@@ -610,7 +610,7 @@ function getOnboardingHTML() {
           <div class="ticket-row">
             <div>
               <div class="ticket-field-label">Tu Lightning Address</div>
-              <div class="ticket-field-value electric" id="ticket-address">wallet@satsparty.app</div>
+              <div class="ticket-field-value electric ln-addr" id="ticket-address">wallet@satsparty.app</div>
             </div>
           </div>
           <div class="ticket-row">

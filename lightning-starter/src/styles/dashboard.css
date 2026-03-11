@@ -189,20 +189,20 @@
 }
 .recharge-banner.pesos::before { background: linear-gradient(90deg, var(--electric), transparent); }
 .recharge-banner.usdt {
-  border-color: rgba(38,161,123,.2);
-  background: rgba(38,161,123,.05);
-  box-shadow: 0 4px 20px rgba(38,161,123,.04), inset 0 1px 0 rgba(38,161,123,.06);
+  border-color: rgba(0,212,255,.2);
+  background: rgba(0,212,255,.05);
+  box-shadow: 0 4px 20px rgba(0,212,255,.04), inset 0 1px 0 rgba(0,212,255,.06);
 }
 .recharge-banner.usdt:hover {
-  background: rgba(38,161,123,.08);
-  border-color: rgba(38,161,123,.3);
-  box-shadow: 0 6px 28px rgba(38,161,123,.08), inset 0 1px 0 rgba(38,161,123,.1);
+  background: rgba(0,212,255,.08);
+  border-color: rgba(0,212,255,.3);
+  box-shadow: 0 6px 28px rgba(0,212,255,.08), inset 0 1px 0 rgba(0,212,255,.1);
 }
-.recharge-banner.usdt::before { background: linear-gradient(90deg, #26a17b, transparent); }
+.recharge-banner.usdt::before { background: linear-gradient(90deg, #00d4ff, transparent); }
 .recharge-banner-left { display: flex; align-items: center; gap: .7rem; }
 .recharge-banner-title { font-family: var(--font-display); font-size: 1.2rem; line-height: 1; }
 .recharge-banner.pesos .recharge-banner-title { color: var(--electric); }
-.recharge-banner.usdt  .recharge-banner-title { color: #26a17b; }
+.recharge-banner.usdt  .recharge-banner-title { color: #00d4ff; }
 .recharge-banner-sub { font-family: var(--font-mono); font-size: .55rem; color: var(--muted); margin-top: .1rem; letter-spacing: .05em; }
 .recharge-banner-chevron { font-size: 1.1rem; color: var(--muted); }
 
@@ -237,7 +237,12 @@
   padding: 1rem; margin-bottom: 1rem;
   box-shadow: 0 4px 20px rgba(0,0,0,.15), inset 0 1px 0 rgba(255,255,255,.04);
 }
-.address-val { font-family: var(--font-mono); font-size: .68rem; color: var(--electric); word-break: break-all; line-height: 1.6; margin-bottom: .8rem; }
+.address-val {
+  font-family: var(--font-address); font-size: 1.15rem; font-weight: 300;
+  letter-spacing: .05em; color: var(--electric);
+  text-align: center; word-break: break-all; line-height: 1.4;
+  margin-bottom: 1rem; padding: .5rem 0;
+}
 .qr-box { width: 160px; height: 160px; background: var(--white); margin: 0 auto 1rem; display: flex; align-items: center; justify-content: center; padding: 8px; }
 
 /* SEND */
@@ -443,11 +448,11 @@
 }
 /* USDT color variant */
 .wizard-step-dot[style*="--dot-color"].active {
-  background: rgba(38,161,123,.12); border-color: rgba(38,161,123,.4); color: #26a17b;
-  box-shadow: 0 0 16px rgba(38,161,123,.15);
+  background: rgba(0,212,255,.12); border-color: rgba(0,212,255,.4); color: #00d4ff;
+  box-shadow: 0 0 16px rgba(0,212,255,.15);
 }
 .wizard-step-dot[style*="--dot-color"].done {
-  background: rgba(38,161,123,.06); border-color: rgba(38,161,123,.2); color: rgba(38,161,123,.5);
+  background: rgba(0,212,255,.06); border-color: rgba(0,212,255,.2); color: rgba(0,212,255,.5);
 }
 .wizard-step-line {
   flex: 1; height: 1px; background: rgba(255,255,255,.08);
