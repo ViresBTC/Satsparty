@@ -137,8 +137,8 @@ function setupDashboardEvents() {
   onClick("usdt-next-2", () => wizardStep("usdt", 3, 3));
   onClick("usdt-prev-2", () => wizardStep("usdt", 1, 3));
   onClick("usdt-prev-3", () => wizardStep("usdt", 2, 3));
-  onClick("btn-copy-boltz-addr", () => {
-    copyToClipboard("TQn9Y2khEsLJW1ChVWFMSMeRDow5KcbLSE");
+  onClick("btn-open-fixedfloat", () => {
+    window.open("https://ff.io/exchange/usdttrc20/btcln", "_blank");
   });
 
   // Close buttons (back to dashboard)
@@ -767,7 +767,7 @@ function getDashboardHTML() {
     <div class="recharge-section">
       <div class="recharge-label">Recargar con fiat</div>
       <div class="recharge-banner pesos"><div class="recharge-banner-left"><span style="font-size:1.2rem">🧉</span><div><div class="recharge-banner-title">PESOS → SATS</div><div class="recharge-banner-sub">Tutorial · Exchange local → Lightning</div></div></div><span class="recharge-banner-chevron">›</span></div>
-      <div class="recharge-banner usdt"><div class="recharge-banner-left"><span style="font-size:1.2rem">💵</span><div><div class="recharge-banner-title">USDT → SATS</div><div class="recharge-banner-sub">Swap automático · Boltz</div></div></div><span class="recharge-banner-chevron">›</span></div>
+      <div class="recharge-banner usdt"><div class="recharge-banner-left"><span style="font-size:1.2rem">💵</span><div><div class="recharge-banner-title">USDT → SATS</div><div class="recharge-banner-sub">Swap automático · FixedFloat</div></div></div><span class="recharge-banner-chevron">›</span></div>
     </div>
   </div>
 
@@ -785,10 +785,10 @@ function getDashboardHTML() {
         <button class="tab" id="tab-invoice-btn">Invoice</button>
       </div>
       <div id="tab-address">
-        <div class="address-card">
-          <div class="field-label">Tu Lightning Address</div>
+        <div class="address-card" style="text-align:center">
+          <div style="font-family:var(--font-mono);font-size:.5rem;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);margin-bottom:.3rem">Tu Lightning Address</div>
           <div class="address-val">${addr}</div>
-          <div style="background:#fff;padding:12px;display:inline-block;margin:0 auto .8rem;display:flex;justify-content:center" id="address-qr-container"></div>
+          <div style="background:#fff;padding:12px;display:inline-block;margin:0 auto .8rem;border-radius:10px" id="address-qr-container"></div>
           <div style="font-family:var(--font-mono);font-size:.55rem;color:var(--muted);text-align:center;margin-bottom:.8rem">Escaneá para pagar a esta address</div>
           <button class="btn-primary" id="btn-copy-address">Copiar address ⎘</button>
         </div>
@@ -1095,88 +1095,88 @@ function getDashboardHTML() {
       <button data-close style="background:none;border:none;color:var(--muted);font-family:var(--font-mono);font-size:.6rem;cursor:pointer;letter-spacing:.1em">← VOLVER</button>
     </div>
     <div class="screen-body" style="flex:1;overflow-y:auto;padding:.5rem 1.4rem 1.4rem">
-      <p class="screen-title">USDT → Sats<br><span style="color:#26a17b">swap automático.</span></p>
-      <p class="screen-desc">Convertí USDT (Tron TRC-20) a sats vía Boltz Exchange. Sin registro, sin KYC.</p>
+      <p class="screen-title">USDT → Sats<br><span style="color:#00d4ff">swap automático.</span></p>
+      <p class="screen-desc">Convertí USDT a sats vía FixedFloat. Sin registro, sin KYC.</p>
 
       <!-- Step indicators -->
       <div class="wizard-steps" id="usdt-steps">
-        <div class="wizard-step-dot active" data-step="1" style="--dot-color:#26a17b">1</div>
-        <div class="wizard-step-line" style="--line-color:#26a17b"></div>
-        <div class="wizard-step-dot" data-step="2" style="--dot-color:#26a17b">2</div>
-        <div class="wizard-step-line" style="--line-color:#26a17b"></div>
-        <div class="wizard-step-dot" data-step="3" style="--dot-color:#26a17b">3</div>
+        <div class="wizard-step-dot active" data-step="1" style="--dot-color:#00d4ff">1</div>
+        <div class="wizard-step-line" style="--line-color:#00d4ff"></div>
+        <div class="wizard-step-dot" data-step="2" style="--dot-color:#00d4ff">2</div>
+        <div class="wizard-step-line" style="--line-color:#00d4ff"></div>
+        <div class="wizard-step-dot" data-step="3" style="--dot-color:#00d4ff">3</div>
       </div>
 
       <!-- Step 1: Enviar USDT -->
       <div class="wizard-card" id="usdt-step-1">
         <div class="wizard-card-header">
-          <span class="wizard-card-num" style="color:#26a17b">01</span>
+          <span class="wizard-card-num" style="color:#00d4ff">01</span>
           <span class="wizard-card-title">Enviá USDT</span>
         </div>
-        <p class="wizard-card-desc">Enviá USDT por la red Tron (TRC-20) a la dirección de Boltz Exchange.</p>
-        <div class="wizard-info-box" style="border-color:rgba(38,161,123,.25)">
+        <p class="wizard-card-desc">Enviá USDT a la dirección que te da FixedFloat. Soporta Tron (TRC-20), Ethereum, BSC y más.</p>
+        <div class="wizard-info-box" style="border-color:rgba(0,212,255,.25)">
           <div class="wizard-info-row">
-            <span class="wizard-info-label">Red</span>
-            <span class="wizard-info-val" style="color:#26a17b">Tron (TRC-20)</span>
+            <span class="wizard-info-label">Red recomendada</span>
+            <span class="wizard-info-val" style="color:#00d4ff">Tron TRC-20 (fees bajos)</span>
           </div>
           <div class="wizard-info-row">
             <span class="wizard-info-label">Dirección</span>
-            <span class="wizard-info-val" style="color:#26a17b;font-size:.5rem;word-break:break-all">TQn9Y2khEsLJW1ChVWFMSMeRDow5KcbLSE</span>
+            <span class="wizard-info-val" style="color:#00d4ff;font-size:.5rem">Se genera en ff.io</span>
           </div>
           <div class="wizard-info-row">
             <span class="wizard-info-label">Mínimo</span>
-            <span class="wizard-info-val">~$10 USDT</span>
+            <span class="wizard-info-val">~$1 USDT</span>
           </div>
         </div>
-        <button class="btn-primary" id="btn-copy-boltz-addr" style="margin-bottom:.5rem;background:rgba(38,161,123,.15);border-color:#26a17b;color:#26a17b">Copiar dirección Boltz ⎘</button>
-        <div class="wizard-tip" style="border-left-color:#26a17b">
-          <span style="color:#26a17b">IMPORTANTE:</span> Usá SOLO la red TRC-20 (Tron). Otras redes no funcionan.
+        <button class="btn-primary" id="btn-open-fixedfloat" style="margin-bottom:.5rem;background:rgba(0,212,255,.15);border-color:#00d4ff;color:#00d4ff">Abrir FixedFloat ↗</button>
+        <div class="wizard-tip" style="border-left-color:#00d4ff">
+          <span style="color:#00d4ff">IMPORTANTE:</span> Seleccioná USDT como origen y Lightning BTC como destino. Red recomendada: Tron (TRC-20) por fees bajos.
         </div>
-        <button class="btn-primary" id="usdt-next-1" style="background:rgba(38,161,123,.15);border-color:#26a17b;color:#26a17b">Siguiente →</button>
+        <button class="btn-primary" id="usdt-next-1" style="background:rgba(0,212,255,.15);border-color:#00d4ff;color:#00d4ff">Siguiente →</button>
       </div>
 
       <!-- Step 2: Swap automático -->
       <div class="wizard-card" id="usdt-step-2" style="display:none">
         <div class="wizard-card-header">
-          <span class="wizard-card-num" style="color:#26a17b">02</span>
+          <span class="wizard-card-num" style="color:#00d4ff">02</span>
           <span class="wizard-card-title">Swap automático</span>
         </div>
-        <p class="wizard-card-desc">Boltz Exchange convierte tus USDT a BTC y los envía por Lightning Network automáticamente.</p>
-        <div class="wizard-info-box" style="border-color:rgba(38,161,123,.25)">
+        <p class="wizard-card-desc">FixedFloat convierte tus USDT a BTC y los envía por Lightning Network automáticamente.</p>
+        <div class="wizard-info-box" style="border-color:rgba(0,212,255,.25)">
           <div class="wizard-info-row">
             <span class="wizard-info-label">Proceso</span>
-            <span class="wizard-info-val">Automático (atomic swap)</span>
+            <span class="wizard-info-val">Automático (tipo de cambio fijo)</span>
           </div>
           <div class="wizard-info-row">
             <span class="wizard-info-label">Demora</span>
-            <span class="wizard-info-val" style="color:var(--green)">~1-5 minutos</span>
+            <span class="wizard-info-val" style="color:var(--green)">~5-30 minutos</span>
           </div>
           <div class="wizard-info-row">
             <span class="wizard-info-label">Fee</span>
-            <span class="wizard-info-val">~0.5%</span>
+            <span class="wizard-info-val">~1%</span>
           </div>
           <div class="wizard-info-row">
             <span class="wizard-info-label">KYC</span>
             <span class="wizard-info-val" style="color:var(--green)">No requiere</span>
           </div>
         </div>
-        <div class="wizard-tip" style="border-left-color:#26a17b">
-          <span style="color:#26a17b">NOTA:</span> El swap es trustless — usa contratos atómicos. No necesitás confiar en Boltz.
+        <div class="wizard-tip" style="border-left-color:#00d4ff">
+          <span style="color:#00d4ff">NOTA:</span> FixedFloat es un exchange automatizado. El swap se procesa al recibir tu depósito.
         </div>
         <div style="display:flex;gap:.5rem">
           <button class="btn-secondary" id="usdt-prev-2" style="flex:1">← Atrás</button>
-          <button class="btn-primary" id="usdt-next-2" style="flex:1;background:rgba(38,161,123,.15);border-color:#26a17b;color:#26a17b">Siguiente →</button>
+          <button class="btn-primary" id="usdt-next-2" style="flex:1;background:rgba(0,212,255,.15);border-color:#00d4ff;color:#00d4ff">Siguiente →</button>
         </div>
       </div>
 
       <!-- Step 3: Recibir sats -->
       <div class="wizard-card" id="usdt-step-3" style="display:none">
         <div class="wizard-card-header">
-          <span class="wizard-card-num" style="color:#26a17b">03</span>
+          <span class="wizard-card-num" style="color:#00d4ff">03</span>
           <span class="wizard-card-title">Recibí tus sats</span>
         </div>
         <p class="wizard-card-desc">Los sats llegan directo a tu wallet SatsParty vía Lightning Network.</p>
-        <div class="wizard-info-box" style="border-color:rgba(38,161,123,.25)">
+        <div class="wizard-info-box" style="border-color:rgba(0,212,255,.25)">
           <div class="wizard-info-row">
             <span class="wizard-info-label">Destino</span>
             <span class="wizard-info-val" style="color:var(--electric);font-size:.55rem">${addr}</span>
@@ -1186,12 +1186,12 @@ function getDashboardHTML() {
             <span class="wizard-info-val" style="color:var(--electric)">1 USDT ≈ ${Math.round(100_000_000 / state.btcUsd).toLocaleString()} sats</span>
           </div>
         </div>
-        <div class="wizard-tip" style="border-left-color:#26a17b">
-          <span style="color:#26a17b">TIP:</span> Podés verificar el estado del swap en boltz.exchange con tu dirección.
+        <div class="wizard-tip" style="border-left-color:#00d4ff">
+          <span style="color:#00d4ff">TIP:</span> Podés verificar el estado del swap en ff.io con tu order ID.
         </div>
         <div style="display:flex;gap:.5rem">
           <button class="btn-secondary" id="usdt-prev-3" style="flex:1">← Atrás</button>
-          <button class="btn-primary" data-close style="flex:1;background:rgba(38,161,123,.15);border-color:#26a17b;color:#26a17b">Listo ⚡</button>
+          <button class="btn-primary" data-close style="flex:1;background:rgba(0,212,255,.15);border-color:#00d4ff;color:#00d4ff">Listo ⚡</button>
         </div>
       </div>
     </div>

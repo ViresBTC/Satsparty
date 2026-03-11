@@ -13,6 +13,7 @@
   --mid: #2A2A2A;
   --muted: #555;
   --green: #00FF87;
+  --cyan: #00d4ff;
   --font-display: 'Bebas Neue', sans-serif;
   --font-body: 'DM Sans', sans-serif;
   --font-mono: 'Space Mono', monospace;
@@ -576,11 +577,18 @@ body::after {
   margin-bottom: 0.3rem;
 }
 .info-card-value {
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
+  font-family: var(--font-address);
+  font-size: 0.95rem;
+  font-weight: 300;
+  letter-spacing: .04em;
   color: var(--white);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .info-card-value.electric { color: var(--electric); }
+.info-card-value.ln-addr,
+.ticket-field-value.ln-addr {
+  font-family: var(--font-address); font-weight: 300;
+  font-size: .95rem; letter-spacing: .04em;
+}
