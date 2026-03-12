@@ -21,8 +21,14 @@ function setupOnboardingEvents() {
   // Back to welcome
   on("btn-back-welcome", "click", () => ctx.goTo("screen-welcome"));
 
-  // New wallet
-  on("btn-new-wallet", "click", handleNewWallet);
+  // New wallet → Name screen
+  on("btn-new-wallet", "click", () => ctx.goTo("screen-name"));
+
+  // Back from name to connect
+  on("btn-back-connect", "click", () => ctx.goTo("screen-connect"));
+
+  // Name → Create wallet
+  on("btn-continue-name", "click", handleNameSubmit);
 
   // Existing wallet
   on("btn-existing-wallet", "click", handleExistingWallet);
@@ -42,6 +48,35 @@ function setupOnboardingEvents() {
   on("btn-goto-dashboard", "click", () => ctx.onOnboardingComplete());
   on("btn-back-complete", "click", () => ctx.goTo("screen-complete"));
 
+  // Name input: live preview of lightning address
+  on("input-name", "input", () => {
+    const input = document.getElementById("input-name");
+    const preview = document.getElementById("name-preview-addr");
+    if (!input || !preview) return;
+    const val = input.value.trim();
+    if (val.length > 0) {
+      const clean = val
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9]/g, "")
+        .slice(0, 20);
+      preview.textContent = `${clean || "user"}@satsparty.app`;
+      preview.style.color = "var(--electric)";
+    } else {
+      preview.textContent = "nombre@satsparty.app";
+      preview.style.color = "var(--muted)";
+    }
+  });
+
+  // Enter key on name input submits
+  on("input-name", "keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleNameSubmit();
+    }
+  });
+
   // Created → Missions (activate first mission on enter)
   on("btn-goto-missions", "click", () => {
     ctx.goTo("screen-missions");
@@ -51,38 +86,99 @@ function setupOnboardingEvents() {
 
 // ── WALLET CREATION ──
 
-async function handleNewWallet() {
+async function handleNameSubmit() {
+  const input = document.getElementById("input-name");
+  const errEl = document.getElementById("name-error");
+  const name = input?.value?.trim();
+
+  if (errEl) errEl.textContent = "";
+
+  if (!name || name.length < 2) {
+    if (errEl) errEl.textContent = "Ingresá tu nombre (mínimo 2 letras)";
+    return;
+  }
+
   ctx.goTo("screen-creating");
   const state = ctx.getState();
+  const eventCode = state.eventCode;
 
-  // Verificar si hay NWC URL configurada (desde .env o ingresada)
-  const nwcUrl = import.meta.env.VITE_NWC_URL || state.nwcUrl;
-
-  if (nwcUrl) {
-    // NWC real
+  // Try to claim via backend
+  if (eventCode) {
     await runCreationAnimation(async (step) => {
-      if (step === 0) {
-        // Conectar wallet real
+      if (step === 1) {
+        // Step 1 = "Creando Lightning Address" — call backend here
         try {
-          const result = await ctx.onWalletCreated(nwcUrl);
-          updateCreatedScreen(result.balance);
+          const res = await fetch(`/api/onboard/${eventCode}/claim`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ displayName: name }),
+          });
+          const data = await res.json();
+
+          if (!res.ok) {
+            ctx.showToast(data.error || "Error creando wallet");
+            ctx.goTo("screen-name");
+            return false;
+          }
+
+          // Save attendee data in state
+          ctx.setState({
+            displayName: name,
+            lightningAddress: data.attendee.lightningAddress,
+            attendeeToken: data.attendee.token,
+            balance: data.attendee.balanceSats,
+            walletCreated: true,
+            nwcUrl: data.attendee.nwcUrl,
+          });
+
+          updateCreatedScreen(data.attendee.balanceSats);
         } catch (err) {
-          ctx.showToast("Error conectando wallet");
-          console.error(err);
-          ctx.goTo("screen-connect");
-          return false;
+          console.warn("[SatsParty] Backend error, modo demo:", err);
+          // Fallback: demo mode
+          const addr = generateLocalAddress(name);
+          ctx.setState({
+            displayName: name,
+            lightningAddress: addr,
+            balance: state.welcomeSats || 100,
+            walletCreated: true,
+          });
+          updateCreatedScreen(state.welcomeSats || 100);
         }
       }
       return true;
     });
   } else {
-    // Demo mode — sin NWC
+    // No event code — demo mode
     await runCreationAnimation();
-    ctx.setState({ balance: 100, walletCreated: true });
+    const addr = generateLocalAddress(name);
+    ctx.setState({
+      displayName: name,
+      lightningAddress: addr,
+      balance: 100,
+      walletCreated: true,
+    });
     updateCreatedScreen(100);
   }
 
   ctx.goTo("screen-created");
+}
+
+/**
+ * Generate a local lightning address for demo mode
+ */
+function generateLocalAddress(name) {
+  const clean = name
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]/g, "")
+    .slice(0, 20);
+  return `${clean || "user"}@satsparty.app`;
+}
+
+async function handleNewWallet() {
+  // Legacy: redirect to name screen
+  ctx.goTo("screen-name");
 }
 
 function handleExistingWallet() {
@@ -426,6 +522,43 @@ function getOnboardingHTML() {
           </p>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- SCREEN: NAME -->
+  <div class="screen" id="screen-name">
+    <div class="topbar">
+      <span class="topbar-logo">Sats<span>Party</span></span>
+      <button id="btn-back-connect" style="background:none;border:none;color:var(--muted);font-family:var(--font-mono);font-size:0.62rem;cursor:pointer;letter-spacing:0.1em;">← VOLVER</button>
+    </div>
+    <div class="progress-wrap">
+      <div class="progress-steps">
+        <div class="progress-step done"></div>
+        <div class="progress-step active"></div>
+        <div class="progress-step"></div>
+        <div class="progress-step"></div>
+      </div>
+    </div>
+    <div style="flex:1;display:flex;flex-direction:column;padding:1rem 1.5rem 2rem;">
+      <p class="screen-label">Paso 2 de 4</p>
+      <h2 class="screen-title" style="font-size:3rem">¿Cómo te<br>llamás?</h2>
+      <p class="screen-desc">Tu nombre se usa para crear tu Lightning Address personal. Así te van a poder enviar sats.</p>
+      <div style="margin-bottom:.3rem">
+        <div class="field-label">Tu nombre</div>
+        <input class="field-input" type="text" id="input-name" placeholder="Ej: Satoshi" autofocus
+               style="font-size:1.1rem;font-weight:500;text-align:center" maxlength="30" />
+      </div>
+      <div id="name-preview" style="text-align:center;margin-bottom:1.5rem;">
+        <div style="font-family:var(--font-mono);font-size:.55rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:.3rem">Tu dirección será</div>
+        <div style="font-family:var(--font-address);font-size:1rem;color:var(--electric);font-weight:300;letter-spacing:.03em" id="name-preview-addr">nombre@satsparty.app</div>
+      </div>
+      <div class="login-error" id="name-error"></div>
+    </div>
+    <div class="bottom-nav">
+      <button class="btn btn-electric" id="btn-continue-name">Crear mi wallet ⚡</button>
+      <p style="text-align:center;font-family:var(--font-mono);font-size:.55rem;color:var(--muted);letter-spacing:.06em">
+        No se guarda ningún dato personal
+      </p>
     </div>
   </div>
 

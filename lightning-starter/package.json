@@ -4,8 +4,11 @@
   "description": "Starter kit para Lightning Hackathons 2026 - La Crypta",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "concurrently \"vite\" \"node server/index.js\"",
+    "dev:front": "vite",
+    "dev:server": "node server/index.js",
     "build": "vite build",
+    "start": "node server/index.js",
     "preview": "vite preview",
     "example:invoice": "node src/examples/create-invoice.js",
     "example:pay": "node src/examples/pay-invoice.js",
@@ -25,8 +28,16 @@
   "dependencies": {
     "@getalby/lightning-tools": "^5.0.0",
     "@getalby/sdk": "^3.0.0",
+    "@hono/node-server": "^1.19.11",
     "@nostr-dev-kit/ndk": "^2.0.0",
+    "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^12.6.2",
+    "concurrently": "^9.2.1",
+    "hono": "^4.12.7",
     "html5-qrcode": "^2.3.8",
+    "jsonwebtoken": "^9.0.3",
+    "nanoid": "^5.1.6",
+    "qrcode": "^1.5.4",
     "webln": "^0.3.0"
   },
   "devDependencies": {
