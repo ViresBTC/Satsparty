@@ -13,9 +13,10 @@ import { renderDashboard } from "./dashboard.js";
 
 // ── GLOBALS ──
 let currentScreen = null;
+let eventData = null; // datos del evento desde el backend
 
 // ── INIT ──
-function init() {
+async function init() {
   try {
     console.log("[SatsParty] Iniciando...");
     loadState();
@@ -25,13 +26,90 @@ function init() {
     if (state.onboardingComplete && state.nwcUrl) {
       startDashboard();
     } else {
-      startOnboarding();
+      // Extraer código de evento de la URL
+      const eventCode = getEventCode();
+      if (eventCode) {
+        console.log("[SatsParty] Código de evento:", eventCode);
+        const validation = await validateEvent(eventCode);
+        if (validation.ok) {
+          eventData = validation.event;
+          // Guardar datos del evento en el state
+          setState({
+            eventName: eventData.name,
+            eventDate: eventData.date,
+            eventCode: eventData.code,
+            welcomeSats: eventData.welcomeSats,
+          });
+          startOnboarding();
+        } else {
+          showEventBlocked(validation);
+        }
+      } else {
+        // Sin código → modo demo o ya tiene state previo
+        startOnboarding();
+      }
     }
     console.log("[SatsParty] Init OK");
   } catch (err) {
     console.error("[SatsParty] Error:", err);
     document.getElementById("app").innerHTML = `<div style="padding:2rem;color:#F7FF00;font-family:monospace;">${err.message}<br><br><pre>${err.stack}</pre></div>`;
   }
+}
+
+/**
+ * Extraer código de evento de la URL
+ * Soporta: /onboard/CODIGO o ?code=CODIGO
+ */
+function getEventCode() {
+  // Path: /onboard/CODIGO
+  const pathMatch = window.location.pathname.match(/\/onboard\/([^/]+)/);
+  if (pathMatch) return pathMatch[1];
+  // Query: ?code=CODIGO
+  const params = new URLSearchParams(window.location.search);
+  return params.get("code") || null;
+}
+
+/**
+ * Validar evento con el backend
+ */
+async function validateEvent(code) {
+  try {
+    const res = await fetch(`/api/onboard/${code}`);
+    const data = await res.json();
+    if (!res.ok) {
+      return { ok: false, ...data };
+    }
+    return { ok: true, event: data.event };
+  } catch (err) {
+    console.warn("[SatsParty] Backend no disponible, modo offline");
+    return { ok: true, event: null }; // Si backend no está, dejar pasar
+  }
+}
+
+/**
+ * Mostrar pantalla de evento bloqueado (cerrado / lleno / no encontrado)
+ */
+function showEventBlocked(validation) {
+  const app = document.getElementById("app");
+  const isClosed = validation.closed;
+  const isFull = validation.full;
+  const eventName = validation.eventName || "Evento";
+
+  app.innerHTML = `
+    <div class="screen active" style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2rem;text-align:center;gap:1.5rem;">
+      <span class="topbar-logo" style="font-size:1.8rem">Sats<span>Party</span></span>
+      <div style="font-size:3rem">${isClosed ? "🔒" : isFull ? "👥" : "❌"}</div>
+      <h2 style="font-family:var(--font-display);font-size:2.2rem;color:var(--white);line-height:1.1">
+        ${isClosed ? "Evento<br>finalizado" : isFull ? "Evento<br>lleno" : "Evento no<br>encontrado"}
+      </h2>
+      <p style="font-family:var(--font-body);font-size:.9rem;color:var(--muted);line-height:1.6;max-width:300px">
+        ${validation.error || "No se pudo acceder al evento."}
+      </p>
+      ${isClosed ? `<div style="font-family:var(--font-mono);font-size:.6rem;letter-spacing:.1em;color:var(--muted);background:rgba(255,85,85,.08);border:1px solid rgba(255,85,85,.15);padding:.5rem 1rem;border-radius:8px">
+        ${eventName}
+      </div>` : ""}
+    </div>
+  `;
 }
 
 if (document.readyState === "loading") {
