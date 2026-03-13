@@ -7,8 +7,10 @@ import initSqlJs from "sql.js";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
+import { createRequire } from "module";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const require = createRequire(import.meta.url);
 
 const IS_VERCEL = !!process.env.VERCEL;
 const DB_PATH = IS_VERCEL
@@ -37,7 +39,18 @@ async function _initDBInternal() {
     mkdirSync(join(__dirname, "..", "data"), { recursive: true });
   }
 
-  const SQL = await initSqlJs();
+  // Locate the WASM file explicitly for Vercel serverless
+  let wasmBinary;
+  try {
+    const wasmPath = require.resolve("sql.js/dist/sql-wasm.wasm");
+    wasmBinary = readFileSync(wasmPath);
+  } catch {
+    // Fallback: let sql.js find it automatically
+  }
+
+  const SQL = await initSqlJs({
+    ...(wasmBinary ? { wasmBinary } : {}),
+  });
 
   let sqlDb;
   try {

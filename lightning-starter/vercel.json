@@ -2,6 +2,11 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "framework": null,
+  "functions": {
+    "api/**/*.js": {
+      "includeFiles": "node_modules/sql.js/dist/**"
+    }
+  },
   "rewrites": [
     {
       "source": "/api/(.*)",
