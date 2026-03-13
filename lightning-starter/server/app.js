@@ -23,6 +23,16 @@ let dbPromise = null;
 app.use("*", logger());
 app.use("/api/*", cors());
 
+// ── Health Check (no DB needed — for diagnosing deploy issues) ──
+app.get("/api/health", (c) => {
+  return c.json({
+    status: "ok",
+    app: "SatsParty Backend",
+    runtime: process.env.VERCEL ? "vercel" : "local",
+    timestamp: new Date().toISOString(),
+  });
+});
+
 // Pass db to all routes via context (async init)
 app.use("/api/*", async (c, next) => {
   if (!dbPromise) dbPromise = initDB();
@@ -37,14 +47,5 @@ app.route("/api/events", eventRoutes);
 app.route("/api/onboard", onboardRoutes);
 app.route("/api/attendees", attendeeRoutes);
 app.route("/api/prices", priceRoutes);
-
-// ── Health Check ──
-app.get("/api/health", (c) => {
-  return c.json({
-    status: "ok",
-    app: "SatsParty Backend",
-    timestamp: new Date().toISOString(),
-  });
-});
 
 export default app;
