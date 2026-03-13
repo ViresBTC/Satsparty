@@ -15,14 +15,18 @@ import priceRoutes from "./routes/prices.js";
 
 // ── Init ──
 const app = new Hono();
-const db = initDB();
+
+// DB promise (lazy init, cached)
+let dbPromise = null;
 
 // ── Middleware ──
 app.use("*", logger());
 app.use("/api/*", cors());
 
-// Pass db to all routes via context
+// Pass db to all routes via context (async init)
 app.use("/api/*", async (c, next) => {
+  if (!dbPromise) dbPromise = initDB();
+  const db = await dbPromise;
   c.set("db", db);
   await next();
 });

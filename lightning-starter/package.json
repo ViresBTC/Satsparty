@@ -38,6 +38,7 @@
     "jsonwebtoken": "^9.0.3",
     "nanoid": "^5.1.6",
     "qrcode": "^1.5.4",
+    "sql.js": "^1.14.1",
     "webln": "^0.3.0"
   },
   "devDependencies": {

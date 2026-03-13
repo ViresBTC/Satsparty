@@ -1,37 +1,179 @@
-import Database from "better-sqlite3";
+// ═══════════════════════════════════════
+//  SatsParty — Database (sql.js / WASM SQLite)
+//  Works on Vercel serverless + local dev
+// ═══════════════════════════════════════
+
+import initSqlJs from "sql.js";
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
-import { mkdirSync } from "fs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// On Vercel serverless, use /tmp (only writable dir)
-// Locally, use data/ directory
 const IS_VERCEL = !!process.env.VERCEL;
 const DB_PATH = IS_VERCEL
   ? "/tmp/satsparty.db"
   : join(__dirname, "..", "data", "satsparty.db");
 
-export function initDB() {
+let _db = null;
+let _initPromise = null;
+
+/**
+ * Initialize the database (async, cached).
+ * Returns a wrapper with better-sqlite3-compatible API.
+ */
+export async function initDB() {
+  if (_db) return _db;
+  if (_initPromise) return _initPromise;
+
+  _initPromise = _initDBInternal();
+  _db = await _initPromise;
+  return _db;
+}
+
+async function _initDBInternal() {
   // Ensure data directory exists (local only)
   if (!IS_VERCEL) {
     mkdirSync(join(__dirname, "..", "data"), { recursive: true });
   }
 
-  const db = new Database(DB_PATH);
+  const SQL = await initSqlJs();
 
-  // Enable WAL mode for better concurrent performance
-  db.pragma("journal_mode = WAL");
-  db.pragma("foreign_keys = ON");
+  let sqlDb;
+  try {
+    if (existsSync(DB_PATH)) {
+      const data = readFileSync(DB_PATH);
+      sqlDb = new SQL.Database(data);
+    } else {
+      sqlDb = new SQL.Database();
+    }
+  } catch {
+    sqlDb = new SQL.Database();
+  }
+
+  // Run pragmas
+  sqlDb.run("PRAGMA foreign_keys = ON");
 
   // Run migrations
-  migrate(db);
+  migrate(sqlDb);
 
-  return db;
+  // Save after migration
+  save(sqlDb);
+
+  console.log("✓ Database ready (sql.js WASM)");
+
+  return createWrapper(sqlDb);
 }
 
-function migrate(db) {
-  db.exec(`
+/**
+ * Persist the DB to disk
+ */
+function save(sqlDb) {
+  try {
+    const data = sqlDb.export();
+    writeFileSync(DB_PATH, Buffer.from(data));
+  } catch (err) {
+    console.error("DB save error:", err.message);
+  }
+}
+
+/**
+ * Create a wrapper with better-sqlite3-compatible API
+ * so all existing route code works without changes.
+ */
+function createWrapper(sqlDb) {
+  const wrapper = {
+    prepare(sql) {
+      return {
+        /**
+         * Get a single row: .get(param1, param2, ...)
+         */
+        get(...params) {
+          try {
+            const stmt = sqlDb.prepare(sql);
+            if (params.length) stmt.bind(params);
+            if (stmt.step()) {
+              const cols = stmt.getColumnNames();
+              const vals = stmt.get();
+              const row = {};
+              cols.forEach((c, i) => (row[c] = vals[i]));
+              stmt.free();
+              return row;
+            }
+            stmt.free();
+            return undefined;
+          } catch (err) {
+            console.error("DB get error:", err.message, sql);
+            return undefined;
+          }
+        },
+
+        /**
+         * Get all rows: .all(param1, param2, ...)
+         */
+        all(...params) {
+          try {
+            const results = [];
+            const stmt = sqlDb.prepare(sql);
+            if (params.length) stmt.bind(params);
+            while (stmt.step()) {
+              const cols = stmt.getColumnNames();
+              const vals = stmt.get();
+              const row = {};
+              cols.forEach((c, i) => (row[c] = vals[i]));
+              results.push(row);
+            }
+            stmt.free();
+            return results;
+          } catch (err) {
+            console.error("DB all error:", err.message, sql);
+            return [];
+          }
+        },
+
+        /**
+         * Execute a write: .run(param1, param2, ...)
+         * Returns { changes, lastInsertRowid }
+         */
+        run(...params) {
+          try {
+            sqlDb.run(sql, params);
+            const rowid = sqlDb.exec("SELECT last_insert_rowid()");
+            const lastInsertRowid =
+              rowid.length > 0 ? rowid[0].values[0][0] : 0;
+            const changes = sqlDb.getRowsModified();
+            save(sqlDb); // Auto-save after writes
+            return { changes, lastInsertRowid };
+          } catch (err) {
+            console.error("DB run error:", err.message, sql);
+            throw err;
+          }
+        },
+      };
+    },
+
+    exec(sql) {
+      sqlDb.run(sql);
+      save(sqlDb);
+    },
+
+    pragma(str) {
+      try {
+        sqlDb.run(`PRAGMA ${str}`);
+      } catch {
+        // Some pragmas may not be supported in WASM mode
+      }
+    },
+  };
+
+  return wrapper;
+}
+
+/**
+ * Database migrations
+ */
+function migrate(sqlDb) {
+  sqlDb.run(`
     -- Admins (single admin for now)
     CREATE TABLE IF NOT EXISTS admins (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
