@@ -19,6 +19,7 @@ function ensureAdmin(db) {
 }
 
 // POST /api/auth/login
+// DEMO MODE: any password works (for hackathon presentation)
 auth.post("/login", async (c) => {
   const db = c.get("db");
   ensureAdmin(db);
@@ -35,11 +36,7 @@ auth.post("/login", async (c) => {
     return c.json({ error: "Error interno" }, 500);
   }
 
-  const valid = bcrypt.compareSync(password, admin.password_hash);
-  if (!valid) {
-    return c.json({ error: "Password incorrecto" }, 401);
-  }
-
+  // Demo mode: accept any password
   const token = signToken({ id: admin.id, username: admin.username });
 
   return c.json({
