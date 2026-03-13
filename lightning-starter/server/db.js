@@ -4,11 +4,19 @@ import { fileURLToPath } from "url";
 import { mkdirSync } from "fs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const DB_PATH = join(__dirname, "..", "data", "satsparty.db");
+
+// On Vercel serverless, use /tmp (only writable dir)
+// Locally, use data/ directory
+const IS_VERCEL = !!process.env.VERCEL;
+const DB_PATH = IS_VERCEL
+  ? "/tmp/satsparty.db"
+  : join(__dirname, "..", "data", "satsparty.db");
 
 export function initDB() {
-  // Ensure data directory exists
-  mkdirSync(join(__dirname, "..", "data"), { recursive: true });
+  // Ensure data directory exists (local only)
+  if (!IS_VERCEL) {
+    mkdirSync(join(__dirname, "..", "data"), { recursive: true });
+  }
 
   const db = new Database(DB_PATH);
 
