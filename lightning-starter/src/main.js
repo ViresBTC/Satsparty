@@ -75,6 +75,7 @@ function startOnboarding() {
     goTo,
     showToast,
     launchConfetti,
+    launchLightningBolt,
     onWalletCreated,
     onOnboardingComplete,
     getState,
@@ -108,6 +109,7 @@ function startDashboard() {
     goTo,
     showToast,
     launchConfetti,
+    launchLightningBolt,
     getState,
     setState,
     nwcService,
@@ -231,5 +233,97 @@ export function launchConfetti() {
     `;
     container.appendChild(piece);
     setTimeout(() => piece.remove(), (dur + delay) * 1000 + 300);
+  }
+}
+
+export function launchLightningBolt() {
+  const container = document.getElementById("confetti");
+  if (!container) return;
+
+  // 1 — Flash amarillo de pantalla
+  const flash = document.createElement("div");
+  flash.style.cssText = `
+    position:fixed;inset:0;background:rgba(247,255,0,.18);
+    pointer-events:none;z-index:510;
+    animation:lightningFlash .45s ease-out forwards;
+  `;
+  container.appendChild(flash);
+  setTimeout(() => flash.remove(), 500);
+
+  // 2 — Rayo ⚡ central grande
+  const bolt = document.createElement("div");
+  bolt.textContent = "⚡";
+  bolt.style.cssText = `
+    position:fixed;left:50%;top:45%;
+    font-size:6rem;line-height:1;
+    pointer-events:none;z-index:520;
+    filter:drop-shadow(0 0 30px rgba(247,255,0,.7)) drop-shadow(0 0 60px rgba(247,255,0,.3));
+    animation:boltAppear .9s cubic-bezier(.22,.68,0,1.2) forwards;
+  `;
+  container.appendChild(bolt);
+  setTimeout(() => bolt.remove(), 1000);
+
+  // 3 — Glow pulse central
+  const glow = document.createElement("div");
+  glow.style.cssText = `
+    position:fixed;left:50%;top:45%;width:20px;height:20px;
+    border-radius:50%;
+    background:radial-gradient(circle,rgba(247,255,0,.5),transparent 70%);
+    pointer-events:none;z-index:505;
+    animation:glowPulse .8s ease-out forwards;
+  `;
+  container.appendChild(glow);
+  setTimeout(() => glow.remove(), 900);
+
+  // 4 — Anillos expansivos
+  for (let i = 0; i < 3; i++) {
+    const ring = document.createElement("div");
+    ring.style.cssText = `
+      position:fixed;left:50%;top:45%;width:30px;height:30px;
+      border-radius:50%;border:2px solid rgba(247,255,0,.4);
+      pointer-events:none;z-index:506;
+      animation:pulseRing .7s ease-out ${i * 0.15}s forwards;
+    `;
+    container.appendChild(ring);
+    setTimeout(() => ring.remove(), 900 + i * 150);
+  }
+
+  // 5 — Chispas volando en todas direcciones
+  const sparkCount = 12;
+  for (let i = 0; i < sparkCount; i++) {
+    const spark = document.createElement("div");
+    const angle = (i / sparkCount) * 360;
+    const dist = 60 + Math.random() * 80;
+    const sx = Math.cos((angle * Math.PI) / 180) * dist;
+    const sy = Math.sin((angle * Math.PI) / 180) * dist;
+    const size = 3 + Math.random() * 4;
+    spark.style.cssText = `
+      position:fixed;left:50%;top:45%;
+      width:${size}px;height:${size}px;
+      background:${Math.random() > 0.5 ? "#F7FF00" : "#FF6B1A"};
+      border-radius:50%;
+      pointer-events:none;z-index:515;
+      --spark-x:${sx}px;--spark-y:${sy}px;
+      animation:sparkFly .6s ease-out ${Math.random() * 0.15}s forwards;
+    `;
+    container.appendChild(spark);
+    setTimeout(() => spark.remove(), 800);
+  }
+
+  // 6 — Arcos eléctricos
+  for (let i = 0; i < 4; i++) {
+    const arc = document.createElement("div");
+    const angle = Math.random() * 360;
+    arc.style.cssText = `
+      position:fixed;left:50%;top:45%;
+      width:${40 + Math.random() * 30}px;height:2px;
+      background:linear-gradient(90deg,rgba(247,255,0,.8),transparent);
+      pointer-events:none;z-index:512;
+      transform-origin:left center;
+      --angle:${angle}deg;
+      animation:arcFlash .4s ease-out ${i * 0.08}s forwards;
+    `;
+    container.appendChild(arc);
+    setTimeout(() => arc.remove(), 600);
   }
 }

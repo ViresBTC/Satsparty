@@ -101,40 +101,52 @@ async function handleNameSubmit() {
   ctx.goTo("screen-creating");
   const state = ctx.getState();
   const eventCode = state.eventCode;
+  let walletOk = false;
 
-  // Try to claim via backend
+  // Try to claim via backend (with timeout), fallback to demo mode
   if (eventCode) {
     await runCreationAnimation(async (step) => {
       if (step === 1) {
-        // Step 1 = "Creando Lightning Address" — call backend here
+        // Step 1 = "Creando Lightning Address"
+        let backendOk = false;
+
         try {
+          // Timeout de 4s para no quedarnos colgados si el backend no responde
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 4000);
+
           const res = await fetch(`/api/onboard/${eventCode}/claim`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ displayName: name }),
+            signal: controller.signal,
           });
+          clearTimeout(timeout);
+
           const data = await res.json();
 
           if (!res.ok) {
-            ctx.showToast(data.error || "Error creando wallet");
-            ctx.goTo("screen-name");
-            return false;
+            console.warn("[SatsParty] Backend rechazó claim:", data.error);
+            // No bloquear — fallback a demo mode abajo
+          } else {
+            // Save attendee data from backend
+            ctx.setState({
+              displayName: name,
+              lightningAddress: data.attendee.lightningAddress,
+              attendeeToken: data.attendee.token,
+              balance: data.attendee.balanceSats,
+              walletCreated: true,
+              nwcUrl: data.attendee.nwcUrl,
+            });
+            updateCreatedScreen(data.attendee.balanceSats);
+            backendOk = true;
           }
-
-          // Save attendee data in state
-          ctx.setState({
-            displayName: name,
-            lightningAddress: data.attendee.lightningAddress,
-            attendeeToken: data.attendee.token,
-            balance: data.attendee.balanceSats,
-            walletCreated: true,
-            nwcUrl: data.attendee.nwcUrl,
-          });
-
-          updateCreatedScreen(data.attendee.balanceSats);
         } catch (err) {
-          console.warn("[SatsParty] Backend error, modo demo:", err);
-          // Fallback: demo mode
+          console.warn("[SatsParty] Backend no disponible, modo demo:", err.message || err);
+        }
+
+        // Fallback: demo mode si el backend no funcionó
+        if (!backendOk) {
           const addr = generateLocalAddress(name);
           ctx.setState({
             displayName: name,
@@ -147,8 +159,9 @@ async function handleNameSubmit() {
       }
       return true;
     });
+    walletOk = true;
   } else {
-    // No event code — demo mode
+    // No event code — demo mode directo
     await runCreationAnimation();
     const addr = generateLocalAddress(name);
     ctx.setState({
@@ -158,9 +171,14 @@ async function handleNameSubmit() {
       walletCreated: true,
     });
     updateCreatedScreen(100);
+    walletOk = true;
   }
 
-  ctx.goTo("screen-created");
+  if (walletOk) {
+    ctx.launchLightningBolt();
+    setTimeout(() => ctx.launchConfetti(), 350);
+    ctx.goTo("screen-created");
+  }
 }
 
 /**
@@ -235,11 +253,13 @@ function handleExistingWallet() {
 
 function updateCreatedScreen(balance) {
   const balEl = document.getElementById("created-balance");
+  const balDisplayEl = document.getElementById("created-balance-display");
   const addrEl = document.getElementById("created-address");
   const balCardEl = document.getElementById("created-balance-card");
   const state = ctx.getState();
 
   if (balEl) balEl.textContent = balance;
+  if (balDisplayEl) balDisplayEl.textContent = balance;
   if (addrEl) addrEl.textContent = state.lightningAddress || "wallet@satsparty.app";
   if (balCardEl) balCardEl.textContent = balance + " sats";
 }
