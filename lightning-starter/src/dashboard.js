@@ -493,7 +493,8 @@ async function pollInvoice(paymentHash, sats) {
       const result = await ctx.nwcService.lookupInvoice(paymentHash);
       if (result.paid) {
         ctx.showToast(`+${sats} sats recibidos ⚡`);
-        ctx.launchConfetti();
+        ctx.launchLightningBolt();
+        setTimeout(() => ctx.launchConfetti(), 350);
         await refreshBalance();
         return;
       }
@@ -606,7 +607,8 @@ async function confirmSend() {
     if (dashBal) dashBal.textContent = "₿" + newBalance;
 
     navTo("s-success");
-    ctx.launchConfetti();
+    ctx.launchLightningBolt();
+    setTimeout(() => ctx.launchConfetti(), 350);
 
     // Reset form
     if (btn) { btn.disabled = false; btn.textContent = "Confirmar envío ⚡"; }

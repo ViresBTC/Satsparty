@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { nanoid } from "nanoid";
+import { createSubWallet } from "../services/alby.js";
 
 const onboard = new Hono();
 
@@ -99,23 +100,49 @@ onboard.post("/:code/claim", async (c) => {
   // Welcome sats
   const welcomeSats = event.welcome_sats || 100;
 
-  // TODO Phase 3: Create real Alby sub-wallet via API
-  // For now, create attendee record with demo data
-  const nwcUrl = null; // Will be set when Alby integration is done
+  // Create real Alby Hub sub-wallet if credentials are configured
+  let nwcUrl = null;
+  let lud16 = null;
+  let walletPubkey = null;
+  let welcomeFunded = false;
+
+  if (event.alby_hub_url && event.alby_auth_token) {
+    try {
+      console.log(`[Alby] Creating sub-wallet for "${displayName.trim()}"...`);
+      const wallet = await createSubWallet(
+        event.alby_hub_url,
+        event.alby_auth_token,
+        displayName.trim(),
+        0 // no max budget for isolated wallet
+      );
+      nwcUrl = wallet.nwcUrl;
+      lud16 = wallet.lud16;
+      walletPubkey = wallet.walletPubkey;
+      console.log(`[Alby] Sub-wallet created: appId=${wallet.appId}, lud16=${lud16 || "none"}`);
+    } catch (err) {
+      console.error("[Alby] Failed to create sub-wallet:", err.message);
+      // Continue without NWC — attendee gets a record but no real wallet
+    }
+  }
+
+  // Use Alby's lud16 if available, otherwise generate one
+  const finalLightningAddress = lud16 || lightningAddress;
 
   try {
     const result = db
       .prepare(
-        `INSERT INTO attendees (event_id, token, display_name, lightning_address, nwc_url, balance_sats, welcome_funded)
-         VALUES (?, ?, ?, ?, ?, ?, 1)`
+        `INSERT INTO attendees (event_id, token, display_name, lightning_address, nwc_url, wallet_pubkey, balance_sats, welcome_funded)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         event.id,
         token,
         displayName.trim(),
-        lightningAddress,
+        finalLightningAddress,
         nwcUrl,
-        welcomeSats
+        walletPubkey,
+        nwcUrl ? 0 : welcomeSats, // real wallet starts at 0 (needs funding), demo gets welcomeSats
+        nwcUrl ? 0 : 1 // not funded yet if real wallet
       );
 
     const attendee = db
@@ -123,7 +150,7 @@ onboard.post("/:code/claim", async (c) => {
       .get(result.lastInsertRowid);
 
     console.log(
-      `⚡ Nuevo asistente: ${displayName.trim()} → ${lightningAddress} (${welcomeSats} sats)`
+      `⚡ Nuevo asistente: ${displayName.trim()} → ${finalLightningAddress} (wallet: ${nwcUrl ? "real" : "demo"})`
     );
 
     return c.json(
@@ -134,7 +161,7 @@ onboard.post("/:code/claim", async (c) => {
           displayName: attendee.display_name,
           lightningAddress: attendee.lightning_address,
           balanceSats: attendee.balance_sats,
-          welcomeFunded: true,
+          welcomeFunded: !!attendee.welcome_funded,
           nwcUrl: attendee.nwc_url,
         },
         event: {

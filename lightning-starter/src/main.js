@@ -6,110 +6,58 @@
  */
 
 import * as nwcService from "./services/nwc.js";
-import { loadState, getState, setState, satsToUsd, satsToArs, usdToSats, arsToSats } from "./services/state.js";
+import { loadState, getState, setState, satsToUsd, satsToArs, isEventClosed, getEventInfo } from "./services/state.js";
 import { generateQRSvg } from "./services/qr.js";
 import { renderOnboarding } from "./onboarding.js";
 import { renderDashboard } from "./dashboard.js";
+import { renderAdmin } from "./admin.js";
 
 // ── GLOBALS ──
 let currentScreen = null;
-let eventData = null; // datos del evento desde el backend
 
 // ── INIT ──
-async function init() {
+function init() {
   try {
     console.log("[SatsParty] Iniciando...");
     loadState();
     const state = getState();
     console.log("[SatsParty] Estado:", JSON.stringify({ onboardingComplete: state.onboardingComplete, hasNwc: !!state.nwcUrl }));
 
-    if (state.onboardingComplete && state.nwcUrl) {
+    // Detectar evento desde URL (?event=evt_xxx)
+    const urlParams = new URLSearchParams(window.location.search);
+    const eventParam = urlParams.get("event");
+
+    // Si viene con ?event=, cargar info del evento al state
+    if (eventParam) {
+      const eventInfo = getEventInfo(eventParam);
+      if (eventInfo) {
+        setState({
+          eventCode: eventParam,
+          eventName: eventInfo.name,
+          eventDate: eventInfo.date,
+          welcomeSats: eventInfo.welcomeSats,
+        });
+      } else {
+        setState({ eventCode: eventParam });
+      }
+    }
+
+    // Routing: #admin → panel admin, sino → flujo normal
+    if (window.location.hash === "#admin") {
+      startAdmin();
+    } else if (eventParam && isEventClosed(eventParam)) {
+      // Evento cerrado — bloquear acceso
+      showEventClosed();
+    } else if (state.onboardingComplete && state.nwcUrl) {
       startDashboard();
     } else {
-      // Extraer código de evento de la URL
-      const eventCode = getEventCode();
-      if (eventCode) {
-        console.log("[SatsParty] Código de evento:", eventCode);
-        const validation = await validateEvent(eventCode);
-        if (validation.ok) {
-          eventData = validation.event;
-          // Guardar datos del evento en el state
-          setState({
-            eventName: eventData.name,
-            eventDate: eventData.date,
-            eventCode: eventData.code,
-            welcomeSats: eventData.welcomeSats,
-          });
-          startOnboarding();
-        } else {
-          showEventBlocked(validation);
-        }
-      } else {
-        // Sin código → modo demo o ya tiene state previo
-        startOnboarding();
-      }
+      startOnboarding();
     }
     console.log("[SatsParty] Init OK");
   } catch (err) {
     console.error("[SatsParty] Error:", err);
     document.getElementById("app").innerHTML = `<div style="padding:2rem;color:#F7FF00;font-family:monospace;">${err.message}<br><br><pre>${err.stack}</pre></div>`;
   }
-}
-
-/**
- * Extraer código de evento de la URL
- * Soporta: /onboard/CODIGO o ?code=CODIGO
- */
-function getEventCode() {
-  // Path: /onboard/CODIGO
-  const pathMatch = window.location.pathname.match(/\/onboard\/([^/]+)/);
-  if (pathMatch) return pathMatch[1];
-  // Query: ?code=CODIGO
-  const params = new URLSearchParams(window.location.search);
-  return params.get("code") || null;
-}
-
-/**
- * Validar evento con el backend
- */
-async function validateEvent(code) {
-  try {
-    const res = await fetch(`/api/onboard/${code}`);
-    const data = await res.json();
-    if (!res.ok) {
-      return { ok: false, ...data };
-    }
-    return { ok: true, event: data.event };
-  } catch (err) {
-    console.warn("[SatsParty] Backend no disponible, modo offline");
-    return { ok: true, event: null }; // Si backend no está, dejar pasar
-  }
-}
-
-/**
- * Mostrar pantalla de evento bloqueado (cerrado / lleno / no encontrado)
- */
-function showEventBlocked(validation) {
-  const app = document.getElementById("app");
-  const isClosed = validation.closed;
-  const isFull = validation.full;
-  const eventName = validation.eventName || "Evento";
-
-  app.innerHTML = `
-    <div class="screen active" style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2rem;text-align:center;gap:1.5rem;">
-      <span class="topbar-logo" style="font-size:1.8rem">Sats<span>Party</span></span>
-      <div style="font-size:3rem">${isClosed ? "🔒" : isFull ? "👥" : "❌"}</div>
-      <h2 style="font-family:var(--font-display);font-size:2.2rem;color:var(--white);line-height:1.1">
-        ${isClosed ? "Evento<br>finalizado" : isFull ? "Evento<br>lleno" : "Evento no<br>encontrado"}
-      </h2>
-      <p style="font-family:var(--font-body);font-size:.9rem;color:var(--muted);line-height:1.6;max-width:300px">
-        ${validation.error || "No se pudo acceder al evento."}
-      </p>
-      ${isClosed ? `<div style="font-family:var(--font-mono);font-size:.6rem;letter-spacing:.1em;color:var(--muted);background:rgba(255,85,85,.08);border:1px solid rgba(255,85,85,.15);padding:.5rem 1rem;border-radius:8px">
-        ${eventName}
-      </div>` : ""}
-    </div>
-  `;
 }
 
 if (document.readyState === "loading") {
@@ -127,12 +75,30 @@ function startOnboarding() {
     goTo,
     showToast,
     launchConfetti,
+    launchLightningBolt,
     onWalletCreated,
     onOnboardingComplete,
     getState,
     setState,
     nwcService,
     generateQRSvg,
+  });
+}
+
+function startAdmin() {
+  const app = document.getElementById("app");
+  app.innerHTML = "";
+  app.classList.add("app--admin");
+  renderAdmin(app, {
+    goTo,
+    showToast,
+    launchConfetti,
+    getState,
+    setState,
+    nwcService,
+    generateQRSvg,
+    satsToUsd,
+    satsToArs,
   });
 }
 
@@ -143,16 +109,39 @@ function startDashboard() {
     goTo,
     showToast,
     launchConfetti,
+    launchLightningBolt,
     getState,
     setState,
     nwcService,
     generateQRSvg,
     satsToUsd,
     satsToArs,
-    usdToSats,
-    arsToSats,
     reconnectWallet,
   });
+}
+
+function showEventClosed() {
+  const app = document.getElementById("app");
+  app.innerHTML = `
+    <div class="screen active" id="screen-event-closed">
+      <div class="topbar">
+        <span class="topbar-logo">Sats<span>Party</span></span>
+      </div>
+      <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2rem 1.5rem;text-align:center;">
+        <div style="font-size:4rem;margin-bottom:1.5rem;opacity:0.6;">🔒</div>
+        <h1 style="font-family:var(--font-display);font-size:2.8rem;color:var(--white);line-height:0.95;margin-bottom:1rem;">Evento<br><span style="color:var(--orange)">Cerrado</span></h1>
+        <p style="font-family:var(--font-body);font-size:0.95rem;color:var(--muted);line-height:1.5;max-width:300px;margin-bottom:2rem;">
+          Este evento ya no acepta nuevos asistentes. Si ya tenés tu wallet, podés seguir usándola normalmente.
+        </p>
+        <div style="padding:1rem 1.5rem;background:var(--dim);border:1px solid var(--mid);border-radius:12px;max-width:300px;">
+          <div style="font-family:var(--font-mono);font-size:0.55rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:0.5rem;">¿Ya tenés wallet?</div>
+          <p style="font-family:var(--font-body);font-size:0.8rem;color:var(--white);line-height:1.5;margin:0;">
+            Tus sats y tu Lightning Address siguen siendo tuyas para siempre. Podés usarla desde cualquier wallet compatible.
+          </p>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 // ── SCREEN NAVIGATION ──
@@ -228,105 +217,113 @@ export function showToast(msg) {
 export function launchConfetti() {
   const container = document.getElementById("confetti");
   if (!container) return;
-  container.innerHTML = "";
-
-  // Double flash — intense strobe
-  for (let f = 0; f < 2; f++) {
-    const flash = document.createElement("div");
-    flash.style.cssText = `
-      position:fixed;inset:0;
-      background:radial-gradient(circle at 50% 45%, rgba(247,255,0,.35), rgba(247,255,0,.08) 60%, transparent 80%);
-      pointer-events:none;z-index:499;
-      animation:lightningFlash ${0.4 + f * 0.3}s ease-out ${f * 0.15}s forwards;
+  const colors = ["#F7FF00", "#FF6B1A", "#00FF87", "#F2EDE6"];
+  for (let i = 0; i < 50; i++) {
+    const piece = document.createElement("div");
+    const size = Math.random() * 8 + 4;
+    const dur = Math.random() * 1.5 + 1;
+    const delay = Math.random() * 0.8;
+    piece.style.cssText = `
+      position:fixed;width:${size}px;height:${size}px;
+      background:${colors[Math.floor(Math.random() * colors.length)]};
+      left:${Math.random() * 100}%;top:-10px;
+      border-radius:${Math.random() > 0.5 ? "50%" : "0"};
+      pointer-events:none;z-index:500;
+      animation:confettiFall ${dur}s ease-in ${delay}s forwards;
     `;
-    container.appendChild(flash);
-    setTimeout(() => flash.remove(), 800 + f * 300);
+    container.appendChild(piece);
+    setTimeout(() => piece.remove(), (dur + delay) * 1000 + 300);
   }
+}
 
-  // SVG lightning bolt (no emoji)
+export function launchLightningBolt() {
+  const container = document.getElementById("confetti");
+  if (!container) return;
+
+  // 1 — Flash amarillo de pantalla
+  const flash = document.createElement("div");
+  flash.style.cssText = `
+    position:fixed;inset:0;background:rgba(247,255,0,.18);
+    pointer-events:none;z-index:510;
+    animation:lightningFlash .45s ease-out forwards;
+  `;
+  container.appendChild(flash);
+  setTimeout(() => flash.remove(), 500);
+
+  // 2 — Rayo ⚡ central grande
   const bolt = document.createElement("div");
-  bolt.innerHTML = `<svg width="64" height="64" viewBox="0 0 24 24" fill="#F7FF00" xmlns="http://www.w3.org/2000/svg"><path d="M13 2L4 14h7l-2 8 9-12h-7l2-8z"/></svg>`;
+  bolt.textContent = "⚡";
   bolt.style.cssText = `
     position:fixed;left:50%;top:45%;
-    transform:translate(-50%,-50%) scale(0);
-    z-index:502;pointer-events:none;
-    animation:boltAppear .6s cubic-bezier(.34,1.56,.64,1) forwards;
-    filter:drop-shadow(0 0 30px rgba(247,255,0,.8)) drop-shadow(0 0 60px rgba(247,255,0,.4));
+    font-size:6rem;line-height:1;
+    pointer-events:none;z-index:520;
+    filter:drop-shadow(0 0 30px rgba(247,255,0,.7)) drop-shadow(0 0 60px rgba(247,255,0,.3));
+    animation:boltAppear .9s cubic-bezier(.22,.68,0,1.2) forwards;
   `;
   container.appendChild(bolt);
-  setTimeout(() => bolt.remove(), 2500);
+  setTimeout(() => bolt.remove(), 1000);
 
-  // Core glow behind bolt
+  // 3 — Glow pulse central
   const glow = document.createElement("div");
   glow.style.cssText = `
-    position:fixed;left:50%;top:45%;
-    width:20px;height:20px;border-radius:50%;
-    background:radial-gradient(circle, rgba(247,255,0,.6) 0%, transparent 70%);
-    transform:translate(-50%,-50%) scale(1);
-    pointer-events:none;z-index:500;
+    position:fixed;left:50%;top:45%;width:20px;height:20px;
+    border-radius:50%;
+    background:radial-gradient(circle,rgba(247,255,0,.5),transparent 70%);
+    pointer-events:none;z-index:505;
     animation:glowPulse .8s ease-out forwards;
   `;
   container.appendChild(glow);
-  setTimeout(() => glow.remove(), 1000);
+  setTimeout(() => glow.remove(), 900);
 
-  // Pulse rings — 5 waves, more intense
-  for (let i = 0; i < 5; i++) {
+  // 4 — Anillos expansivos
+  for (let i = 0; i < 3; i++) {
     const ring = document.createElement("div");
-    const color = i % 2 === 0 ? "rgba(247,255,0,.5)" : "rgba(0,255,135,.3)";
     ring.style.cssText = `
-      position:fixed;left:50%;top:45%;
-      width:30px;height:30px;border-radius:50%;
-      border:2px solid ${color};
-      transform:translate(-50%,-50%) scale(1);
-      pointer-events:none;z-index:501;
-      animation:pulseRing 1.2s ease-out ${i * 0.18}s forwards;
+      position:fixed;left:50%;top:45%;width:30px;height:30px;
+      border-radius:50%;border:2px solid rgba(247,255,0,.4);
+      pointer-events:none;z-index:506;
+      animation:pulseRing .7s ease-out ${i * 0.15}s forwards;
     `;
     container.appendChild(ring);
-    setTimeout(() => ring.remove(), 1800 + i * 180);
+    setTimeout(() => ring.remove(), 900 + i * 150);
   }
 
-  // Electric sparks — 20 particles, bigger spread
-  for (let i = 0; i < 20; i++) {
+  // 5 — Chispas volando en todas direcciones
+  const sparkCount = 12;
+  for (let i = 0; i < sparkCount; i++) {
     const spark = document.createElement("div");
-    const angle = (i / 20) * 360 + (Math.random() - 0.5) * 30;
-    const dist = 80 + Math.random() * 120;
-    const size = Math.random() * 4 + 2;
-    const dur = 0.5 + Math.random() * 0.5;
-    const delay = Math.random() * 0.25;
-    const colors = ["#F7FF00", "#00FF87", "#F2EDE6", "#FF6B1A"];
-    const color = colors[Math.floor(Math.random() * colors.length)];
+    const angle = (i / sparkCount) * 360;
+    const dist = 60 + Math.random() * 80;
+    const sx = Math.cos((angle * Math.PI) / 180) * dist;
+    const sy = Math.sin((angle * Math.PI) / 180) * dist;
+    const size = 3 + Math.random() * 4;
     spark.style.cssText = `
       position:fixed;left:50%;top:45%;
-      width:${size}px;height:${size}px;border-radius:50%;
-      background:${color};
-      transform:translate(-50%,-50%);
-      pointer-events:none;z-index:501;
-      animation:sparkFly ${dur}s ease-out ${delay}s forwards;
-      --spark-x:${Math.cos(angle * Math.PI / 180) * dist}px;
-      --spark-y:${Math.sin(angle * Math.PI / 180) * dist}px;
-      box-shadow:0 0 8px ${color};
+      width:${size}px;height:${size}px;
+      background:${Math.random() > 0.5 ? "#F7FF00" : "#FF6B1A"};
+      border-radius:50%;
+      pointer-events:none;z-index:515;
+      --spark-x:${sx}px;--spark-y:${sy}px;
+      animation:sparkFly .6s ease-out ${Math.random() * 0.15}s forwards;
     `;
     container.appendChild(spark);
-    setTimeout(() => spark.remove(), (dur + delay) * 1000 + 200);
+    setTimeout(() => spark.remove(), 800);
   }
 
-  // Electric arc lines — 6 random lightning branches
-  for (let i = 0; i < 6; i++) {
+  // 6 — Arcos eléctricos
+  for (let i = 0; i < 4; i++) {
     const arc = document.createElement("div");
     const angle = Math.random() * 360;
-    const len = 40 + Math.random() * 60;
-    const delay = Math.random() * 0.3;
     arc.style.cssText = `
       position:fixed;left:50%;top:45%;
-      width:${len}px;height:1.5px;
-      background:linear-gradient(90deg, rgba(247,255,0,.8), transparent);
+      width:${40 + Math.random() * 30}px;height:2px;
+      background:linear-gradient(90deg,rgba(247,255,0,.8),transparent);
+      pointer-events:none;z-index:512;
       transform-origin:left center;
-      transform:translate(0,-50%) rotate(${angle}deg);
-      pointer-events:none;z-index:501;
-      animation:arcFlash .3s ease-out ${delay}s forwards;
-      box-shadow:0 0 4px rgba(247,255,0,.6);
+      --angle:${angle}deg;
+      animation:arcFlash .4s ease-out ${i * 0.08}s forwards;
     `;
     container.appendChild(arc);
-    setTimeout(() => arc.remove(), 600 + delay * 1000);
+    setTimeout(() => arc.remove(), 600);
   }
 }
