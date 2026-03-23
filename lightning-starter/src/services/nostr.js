@@ -2,12 +2,15 @@
  * SatsParty — Nostr Authentication Service
  *
  * Login con clave privada (nsec/hex) o extensión NIP-07 (Alby, nos2x, etc.)
- * Verifica que el pubkey corresponda al admin autorizado.
+ * Firma eventos auth (NIP-98) para autenticar con el backend.
  */
 
-import { getPublicKey } from "nostr-tools/pure";
+import { getPublicKey, finalizeEvent } from "nostr-tools/pure";
 import { decode, npubEncode } from "nostr-tools/nip19";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils";
+
+// Secret key retenido en memoria (no en localStorage) para firmar eventos
+let _secretKey = null;
 
 // ── LOGIN CON CLAVE PRIVADA ──
 
@@ -38,6 +41,7 @@ export function loginWithPrivateKey(input) {
     );
   }
 
+  _secretKey = secretKeyBytes;
   const pubkey = getPublicKey(secretKeyBytes);
   const npub = npubEncode(pubkey);
 
@@ -76,7 +80,41 @@ export async function loginWithExtension() {
   }
 }
 
-// ── (verifyAdmin eliminado — cada key accede a sus propios eventos) ──
+// ── FIRMA DE EVENTOS AUTH (NIP-98) ──
+
+/**
+ * Firma un evento Nostr kind 27235 para autenticar con el backend.
+ * Usa _secretKey si hay (login nsec) o window.nostr (NIP-07).
+ * @returns {Promise<object>} Evento firmado listo para enviar al backend
+ */
+export async function signAuthEvent() {
+  const eventTemplate = {
+    kind: 27235,
+    created_at: Math.floor(Date.now() / 1000),
+    tags: [
+      ["u", window.location.origin + "/api/auth/nostr"],
+      ["method", "POST"],
+    ],
+    content: "SatsParty admin login",
+  };
+
+  if (_secretKey) {
+    return finalizeEvent(eventTemplate, _secretKey);
+  }
+
+  if (window.nostr) {
+    return window.nostr.signEvent(eventTemplate);
+  }
+
+  throw new Error("No hay método de firma disponible. Logueate primero.");
+}
+
+/**
+ * Limpia la clave privada de memoria (para logout)
+ */
+export function clearSecretKey() {
+  _secretKey = null;
+}
 
 /**
  * Trunca un npub para mostrar

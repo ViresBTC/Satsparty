@@ -1,10 +1,24 @@
 import { Hono } from "hono";
 import { nanoid } from "nanoid";
 import { requireAdmin } from "../middleware/auth.js";
+import { testConnection } from "../services/alby.js";
 
 const events = new Hono();
 
-// All event routes require admin auth
+// ── POST /api/events/test-alby — test Alby Hub connection (no auth required) ──
+events.post("/test-alby", async (c) => {
+  const body = await c.req.json();
+  const { albyHubUrl, albyAuthToken } = body;
+
+  if (!albyHubUrl || !albyAuthToken) {
+    return c.json({ error: "albyHubUrl y albyAuthToken son requeridos" }, 400);
+  }
+
+  const result = await testConnection(albyHubUrl, albyAuthToken);
+  return c.json(result);
+});
+
+// All other event routes require admin auth
 events.use("*", requireAdmin());
 
 // ── POST /api/events — create event ──

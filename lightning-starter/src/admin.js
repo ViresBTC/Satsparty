@@ -3,6 +3,8 @@
  *
  * Login con Nostr → Lista de Eventos → Detalle de Evento
  * Cada organizador (pubkey) ve solo sus propios eventos.
+ *
+ * Usa backend API cuando está disponible, fallback a localStorage.
  */
 
 import {
@@ -10,12 +12,23 @@ import {
   loginWithExtension,
   hasNostrExtension,
   truncateNpub,
+  signAuthEvent,
+  clearSecretKey,
 } from "./services/nostr.js";
-import { loadEvents, createEvent, updateEvent, deleteEvent, setEventClosed, setEventInfo } from "./services/state.js";
+import * as api from "./services/api.js";
+import {
+  loadEvents,
+  createEvent as createLocalEvent,
+  updateEvent as updateLocalEvent,
+  deleteEvent as deleteLocalEvent,
+  setEventClosed,
+  setEventInfo,
+} from "./services/state.js";
 
 let currentScreen = null;
 let ctx = null;
-let activeEventId = null; // evento seleccionado para ver detalle
+let activeEventId = null;
+let _backendOk = false;
 
 // ── RENDER ──
 
@@ -24,6 +37,28 @@ export function renderAdmin(app, context) {
   app.innerHTML = getAdminHTML();
   setupEvents();
 
+  // Try JWT session recovery
+  const token = api.loadToken();
+  if (token) {
+    api.authVerify()
+      .then((data) => {
+        _backendOk = true;
+        if (data.admin?.pubkey) {
+          ctx.setState({ adminPubkey: data.admin.pubkey, adminNpub: data.admin.pubkey });
+        }
+        showEventsList();
+      })
+      .catch(() => {
+        api.clearToken();
+        checkLocalSession();
+      });
+    return;
+  }
+
+  checkLocalSession();
+}
+
+function checkLocalSession() {
   const state = ctx.getState();
   if (state.adminPubkey && state.adminNpub) {
     showEventsList();
@@ -55,7 +90,7 @@ function getAdminHTML() {
             </svg>
           </div>
           <h1 class="admin-title">ADMIN PANEL</h1>
-          <p class="admin-subtitle">Iniciá sesión con tu identidad Nostr</p>
+          <p class="admin-subtitle">Inici\u00e1 sesi\u00f3n con tu identidad Nostr</p>
         </div>
 
         <!-- Clave privada -->
@@ -75,24 +110,24 @@ function getAdminHTML() {
               </svg>
             </button>
           </div>
-          <button class="btn btn-electric admin-btn" id="btn-login-nsec">Iniciar Sesión</button>
+          <button class="btn btn-electric admin-btn" id="btn-login-nsec">Iniciar Sesi\u00f3n</button>
         </div>
 
         <div class="admin-divider"><span>o</span></div>
 
-        <!-- Extensión NIP-07 -->
+        <!-- Extensi\u00f3n NIP-07 -->
         <div class="admin-section">
           <button class="btn btn-dim admin-btn admin-ext-btn" id="btn-login-extension" ${!hasExtension ? "disabled" : ""}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
               <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
             </svg>
-            Conectar con Extensión Nostr
+            Conectar con Extensi\u00f3n Nostr
           </button>
           <div class="admin-ext-hint">
             ${hasExtension
-              ? '<span class="admin-ext-detected">Extensión detectada</span>'
-              : '<span class="admin-ext-missing">No se detectó extensión — <a href="https://getalby.com" target="_blank" rel="noopener">Instalar Alby</a></span>'}
+              ? '<span class="admin-ext-detected">Extensi\u00f3n detectada</span>'
+              : '<span class="admin-ext-missing">No se detect\u00f3 extensi\u00f3n \u2014 <a href="https://getalby.com" target="_blank" rel="noopener">Instalar Alby</a></span>'}
           </div>
         </div>
 
@@ -107,12 +142,13 @@ function getAdminHTML() {
     <div class="screen" id="screen-admin-events">
       <div class="topbar">
         <span class="topbar-logo">Sats<span>Party</span></span>
-        <button class="admin-logout-btn" id="btn-admin-logout">Cerrar Sesión</button>
+        <button class="admin-logout-btn" id="btn-admin-logout">Cerrar Sesi\u00f3n</button>
       </div>
       <div class="screen-body admin-panel-body">
         <div class="admin-panel-header">
           <div class="admin-panel-badge">ADMIN</div>
           <div class="admin-panel-identity" id="admin-identity"></div>
+          <span class="admin-backend-badge" id="admin-backend-badge"></span>
         </div>
 
         <h2 class="admin-events-title">MIS EVENTOS</h2>
@@ -136,11 +172,11 @@ function getAdminHTML() {
         <!-- Banner evento cerrado -->
         <div class="admin-closed-banner" id="event-closed-banner" style="display:none">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          EVENTO CERRADO — Ya no se aceptan nuevos asistentes
+          EVENTO CERRADO \u2014 Ya no se aceptan nuevos asistentes
         </div>
 
         <div class="admin-event-grid">
-          <!-- ── COLUMNA IZQUIERDA: Config + NWC ── -->
+          <!-- \u2500\u2500 COLUMNA IZQUIERDA: Config + Alby Hub \u2500\u2500 -->
           <div class="admin-event-col">
             <!-- Config -->
             <div class="admin-card">
@@ -161,24 +197,27 @@ function getAdminHTML() {
               </div>
             </div>
 
-            <!-- NWC -->
+            <!-- Alby Hub -->
             <div class="admin-card">
               <div class="admin-card-title">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-                Wallet Connect (NWC)
+                Alby Hub
               </div>
               <div class="admin-card-body">
-                <div class="field-label">NWC URL del Organizador</div>
-                <input class="field-input" id="admin-nwc-url" type="password" placeholder="nostr+walletconnect://..." autocomplete="off"/>
-                <button class="btn btn-dim admin-btn" id="btn-test-nwc" style="margin-top:.75rem">Probar Conexi\u00f3n</button>
-                <div class="admin-nwc-status" id="admin-nwc-status"></div>
+                <div class="field-label">URL del Alby Hub</div>
+                <input class="field-input" id="admin-alby-url" placeholder="https://tu-hub.albylndhub.com" autocomplete="off"/>
+                <div class="field-label" style="margin-top:.75rem">Auth Token</div>
+                <input class="field-input" id="admin-alby-token" type="password" placeholder="Token de autenticaci\u00f3n" autocomplete="off"/>
+                <div class="admin-alby-hint" id="admin-alby-hint" style="display:none;margin-top:.5rem;font-size:.75rem;color:var(--green);"></div>
+                <button class="btn btn-dim admin-btn" id="btn-test-alby" style="margin-top:.75rem">Probar Conexi\u00f3n</button>
+                <div class="admin-nwc-status" id="admin-alby-status"></div>
               </div>
             </div>
           </div>
 
-          <!-- ── COLUMNA DERECHA: QR + Stats + Asistentes ── -->
+          <!-- \u2500\u2500 COLUMNA DERECHA: QR + Stats + Asistentes \u2500\u2500 -->
           <div class="admin-event-col">
-            <!-- QR del evento (solo en modo edición) -->
+            <!-- QR del evento (solo en modo edici\u00f3n) -->
             <div class="admin-card" id="event-qr-card" style="display:none">
               <div class="admin-card-title">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--electric)" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="3" height="3"/></svg>
@@ -197,7 +236,7 @@ function getAdminHTML() {
               </div>
             </div>
 
-            <!-- Stats (solo en modo edición) -->
+            <!-- Stats (solo en modo edici\u00f3n) -->
             <div class="admin-card" id="event-stats-card" style="display:none">
               <div class="admin-card-title">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -284,7 +323,7 @@ function setupEvents() {
   onClick("btn-delete-event", handleDeleteEvent);
   onClick("btn-close-event", handleCloseEvent);
   onClick("btn-reopen-event", handleReopenEvent);
-  onClick("btn-test-nwc", handleTestNwc);
+  onClick("btn-test-alby", handleTestAlby);
   onClick("btn-copy-link", handleCopyLink);
 }
 
@@ -297,7 +336,7 @@ async function handleNsecLogin() {
   const value = input?.value?.trim();
 
   if (!value) {
-    showError("Pegá tu clave privada (nsec o hex).");
+    showError("Peg\u00e1 tu clave privada (nsec o hex).");
     return;
   }
 
@@ -306,11 +345,21 @@ async function handleNsecLogin() {
 
   try {
     const { pubkey, npub } = loginWithPrivateKey(value);
-
     ctx.setState({ adminPubkey: pubkey, adminNpub: npub });
     input.value = "";
 
-    ctx.showToast("Login exitoso");
+    // Try backend auth
+    try {
+      const signed = await signAuthEvent();
+      await api.authNostr(signed);
+      _backendOk = true;
+      ctx.showToast("Login exitoso");
+    } catch (backendErr) {
+      console.warn("[Admin] Backend auth failed, modo local:", backendErr.message);
+      _backendOk = false;
+      ctx.showToast("Login exitoso (modo local)");
+    }
+
     showEventsList();
   } catch (err) {
     showError(err.message);
@@ -325,10 +374,20 @@ async function handleExtensionLogin() {
 
   try {
     const { pubkey, npub } = await loginWithExtension();
-
     ctx.setState({ adminPubkey: pubkey, adminNpub: npub });
 
-    ctx.showToast("Conectado con extensión");
+    // Try backend auth
+    try {
+      const signed = await signAuthEvent();
+      await api.authNostr(signed);
+      _backendOk = true;
+      ctx.showToast("Conectado con extensi\u00f3n");
+    } catch (backendErr) {
+      console.warn("[Admin] Backend auth failed, modo local:", backendErr.message);
+      _backendOk = false;
+      ctx.showToast("Conectado (modo local)");
+    }
+
     showEventsList();
   } catch (err) {
     showError(err.message);
@@ -339,7 +398,10 @@ async function handleExtensionLogin() {
 
 function handleLogout() {
   ctx.setState({ adminPubkey: null, adminNpub: null });
-  ctx.showToast("Sesión cerrada");
+  api.clearToken();
+  clearSecretKey();
+  _backendOk = false;
+  ctx.showToast("Sesi\u00f3n cerrada");
   goTo("screen-admin-login");
 }
 
@@ -347,25 +409,50 @@ function handleLogout() {
 // EVENTS LIST
 // ══════════════════════════════════════════════════
 
-function showEventsList() {
+async function showEventsList() {
   const state = ctx.getState();
   const pubkey = state.adminPubkey;
-  const events = loadEvents(pubkey);
 
   // Identidad
   const identityEl = document.getElementById("admin-identity");
   if (identityEl) identityEl.textContent = truncateNpub(state.adminNpub);
 
-  // Renderizar lista
+  // Backend badge
+  const badgeEl = document.getElementById("admin-backend-badge");
+  if (badgeEl) {
+    if (_backendOk) {
+      badgeEl.textContent = "API";
+      badgeEl.style.cssText = "display:inline-block;font-size:.6rem;padding:2px 6px;border-radius:4px;background:var(--green);color:var(--black);font-weight:700;letter-spacing:.05em;margin-left:.5rem;vertical-align:middle;";
+    } else {
+      badgeEl.textContent = "LOCAL";
+      badgeEl.style.cssText = "display:inline-block;font-size:.6rem;padding:2px 6px;border-radius:4px;background:var(--muted);color:var(--black);font-weight:700;letter-spacing:.05em;margin-left:.5rem;vertical-align:middle;";
+    }
+  }
+
+  // Obtener eventos
   const listEl = document.getElementById("admin-events-list");
   if (!listEl) return;
+
+  let events = [];
+
+  if (_backendOk) {
+    try {
+      const data = await api.listEvents();
+      events = data.events.map(apiEventToLocal);
+    } catch (err) {
+      console.warn("[Admin] API listEvents failed, using local:", err.message);
+      events = loadEvents(pubkey);
+    }
+  } else {
+    events = loadEvents(pubkey);
+  }
 
   if (events.length === 0) {
     listEl.innerHTML = `
       <div class="admin-empty-state">
-        <div class="admin-empty-icon">⚡</div>
-        <div class="admin-empty-text">No tenés eventos todavía</div>
-        <div class="admin-empty-sub">Creá tu primer evento para empezar a recibir asistentes</div>
+        <div class="admin-empty-icon">\u26a1</div>
+        <div class="admin-empty-text">No ten\u00e9s eventos todav\u00eda</div>
+        <div class="admin-empty-sub">Cre\u00e1 tu primer evento para empezar a recibir asistentes</div>
       </div>
     `;
   } else {
@@ -407,7 +494,7 @@ function showEventsList() {
 // EVENT FORM (crear / editar)
 // ══════════════════════════════════════════════════
 
-function showEventForm(eventId) {
+async function showEventForm(eventId) {
   const state = ctx.getState();
   const pubkey = state.adminPubkey;
   const isNew = !eventId;
@@ -423,24 +510,28 @@ function showEventForm(eventId) {
   const dateInput = document.getElementById("admin-event-date");
   const satsInput = document.getElementById("admin-welcome-sats");
   const maxInput = document.getElementById("admin-max-attendees");
-  const nwcInput = document.getElementById("admin-nwc-url");
+  const albyUrlInput = document.getElementById("admin-alby-url");
+  const albyTokenInput = document.getElementById("admin-alby-token");
+  const albyHint = document.getElementById("admin-alby-hint");
   const statsCard = document.getElementById("event-stats-card");
   const qrCard = document.getElementById("event-qr-card");
   const deleteBtn = document.getElementById("btn-delete-event");
   const closeBtn = document.getElementById("btn-close-event");
   const reopenBtn = document.getElementById("btn-reopen-event");
   const closedBanner = document.getElementById("event-closed-banner");
-  const nwcStatus = document.getElementById("admin-nwc-status");
+  const albyStatus = document.getElementById("admin-alby-status");
 
-  if (nwcStatus) nwcStatus.innerHTML = "";
+  if (albyStatus) albyStatus.innerHTML = "";
 
   if (isNew) {
-    // Form vacío para crear
+    // Form vac\u00edo para crear
     if (nameInput) nameInput.value = "";
     if (dateInput) dateInput.value = "";
     if (satsInput) satsInput.value = "100";
     if (maxInput) maxInput.value = "0";
-    if (nwcInput) nwcInput.value = "";
+    if (albyUrlInput) albyUrlInput.value = "";
+    if (albyTokenInput) albyTokenInput.value = "";
+    if (albyHint) albyHint.style.display = "none";
     if (statsCard) statsCard.style.display = "none";
     if (qrCard) qrCard.style.display = "none";
     if (deleteBtn) deleteBtn.style.display = "none";
@@ -449,8 +540,32 @@ function showEventForm(eventId) {
     if (closedBanner) closedBanner.style.display = "none";
   } else {
     // Cargar datos del evento existente
-    const events = loadEvents(pubkey);
-    const evt = events.find((e) => e.id === eventId);
+    let evt = null;
+    let eventStats = null;
+    let attendees = [];
+
+    if (_backendOk) {
+      try {
+        const eventData = await api.getEvent(eventId);
+        evt = apiEventToLocal(eventData.event);
+        eventStats = eventData.stats;
+
+        const attData = await api.getEventAttendees(eventId);
+        attendees = (attData.attendees || []).map((a) => ({
+          name: a.displayName,
+          lightningAddress: a.lightningAddress,
+          onboarded: a.onboardingComplete,
+        }));
+      } catch (err) {
+        console.warn("[Admin] API fetch failed, using local:", err.message);
+        const events = loadEvents(pubkey);
+        evt = events.find((e) => String(e.id) === String(eventId));
+      }
+    } else {
+      const events = loadEvents(pubkey);
+      evt = events.find((e) => String(e.id) === String(eventId));
+    }
+
     if (!evt) return;
 
     const isClosed = !!evt.closed;
@@ -459,7 +574,18 @@ function showEventForm(eventId) {
     if (dateInput) dateInput.value = evt.date || "";
     if (satsInput) satsInput.value = evt.welcomeSats || 100;
     if (maxInput) maxInput.value = evt.maxAttendees || 0;
-    if (nwcInput) nwcInput.value = evt.nwcUrl || "";
+
+    // Alby Hub fields \u2014 credentials not returned by backend (security)
+    if (albyUrlInput) albyUrlInput.value = "";
+    if (albyTokenInput) albyTokenInput.value = "";
+    if (albyHint) {
+      if (evt.hasAlbyConfig) {
+        albyHint.textContent = "Credenciales guardadas de forma segura en el servidor";
+        albyHint.style.display = "block";
+      } else {
+        albyHint.style.display = "none";
+      }
+    }
 
     // Mostrar/ocultar banner de cerrado
     if (closedBanner) closedBanner.style.display = isClosed ? "flex" : "none";
@@ -471,7 +597,7 @@ function showEventForm(eventId) {
     // QR del evento
     if (qrCard) {
       qrCard.style.display = "block";
-      const eventUrl = getEventUrl(evt.id);
+      const eventUrl = getEventUrl(evt);
       const qrContainer = document.getElementById("event-qr-container");
       const linkDisplay = document.getElementById("event-link-display");
 
@@ -483,20 +609,28 @@ function showEventForm(eventId) {
       }
     }
 
-    // Stats — mostrar max attendees info
+    // Stats
     if (statsCard) statsCard.style.display = "block";
     const statTotal = document.getElementById("stat-total");
     const statOnboarded = document.getElementById("stat-onboarded");
     const statSats = document.getElementById("stat-sats");
-    if (statTotal) {
+
+    if (eventStats) {
+      // Backend stats
       const maxLabel = evt.maxAttendees ? ` / ${evt.maxAttendees}` : "";
-      statTotal.textContent = (evt.attendees || 0) + maxLabel;
+      if (statTotal) statTotal.textContent = (eventStats.totalAttendees || 0) + maxLabel;
+      if (statOnboarded) statOnboarded.textContent = eventStats.onboarded || 0;
+      if (statSats) statSats.textContent = (eventStats.totalSatsDistributed || 0).toLocaleString();
+    } else {
+      // Local stats
+      const maxLabel = evt.maxAttendees ? ` / ${evt.maxAttendees}` : "";
+      if (statTotal) statTotal.textContent = (evt.attendees || 0) + maxLabel;
+      if (statOnboarded) statOnboarded.textContent = evt.attendees || 0;
+      if (statSats) statSats.textContent = (evt.satsDistributed || 0).toLocaleString();
     }
-    if (statOnboarded) statOnboarded.textContent = evt.attendees || 0;
-    if (statSats) statSats.textContent = (evt.satsDistributed || 0).toLocaleString();
 
     // Lista de asistentes
-    renderAttendeesList(evt);
+    renderAttendeesList(attendees.length > 0 ? { attendeesList: attendees } : evt);
 
     if (deleteBtn) deleteBtn.style.display = "block";
   }
@@ -504,9 +638,10 @@ function showEventForm(eventId) {
   goTo("screen-admin-event-form");
 }
 
-function getEventUrl(eventId) {
+function getEventUrl(evt) {
   const base = window.location.origin + window.location.pathname.replace(/\/$/, "");
-  return base + "?event=" + eventId;
+  const identifier = evt.code || evt.id;
+  return base + "?event=" + identifier;
 }
 
 function renderAttendeesList(evt) {
@@ -531,7 +666,7 @@ function renderAttendeesList(evt) {
       ${attendees.map((a) => `
         <div class="admin-attendee-row">
           <span class="admin-attendee-name">${escapeHtml(a.name || "Sin nombre")}</span>
-          <span class="admin-attendee-addr">${escapeHtml(a.lightningAddress || "—")}</span>
+          <span class="admin-attendee-addr">${escapeHtml(a.lightningAddress || "\u2014")}</span>
           <span class="admin-attendee-status ${a.onboarded ? "is-active" : ""}">${a.onboarded ? "Completado" : "Pendiente"}</span>
         </div>
       `).join("")}
@@ -543,7 +678,7 @@ function renderAttendeesList(evt) {
 // EVENT FORM HANDLERS
 // ══════════════════════════════════════════════════
 
-function handleSaveEvent() {
+async function handleSaveEvent() {
   const state = ctx.getState();
   const pubkey = state.adminPubkey;
 
@@ -551,68 +686,130 @@ function handleSaveEvent() {
   const date = document.getElementById("admin-event-date")?.value?.trim();
   const sats = parseInt(document.getElementById("admin-welcome-sats")?.value) || 100;
   const maxAtt = parseInt(document.getElementById("admin-max-attendees")?.value) || 0;
-  const nwcUrl = document.getElementById("admin-nwc-url")?.value?.trim();
+  const albyUrl = document.getElementById("admin-alby-url")?.value?.trim();
+  const albyToken = document.getElementById("admin-alby-token")?.value?.trim();
 
   if (!name) {
     ctx.showToast("Ponele un nombre al evento");
     return;
   }
 
-  if (activeEventId) {
-    // Editar existente
-    updateEvent(pubkey, activeEventId, {
-      name,
-      date,
-      welcomeSats: sats,
-      maxAttendees: maxAtt,
-      nwcUrl: nwcUrl || null,
-    });
-    setEventInfo(activeEventId, { name, date, welcomeSats: sats });
-    ctx.showToast("Evento actualizado");
-  } else {
-    // Crear nuevo
-    const evt = createEvent(pubkey, { name, date, welcomeSats: sats, maxAttendees: maxAtt });
-    if (nwcUrl) {
-      updateEvent(pubkey, evt.id, { nwcUrl });
+  if (_backendOk) {
+    try {
+      if (activeEventId) {
+        // Editar existente
+        const updates = { name, date, welcomeSats: sats, maxAttendees: maxAtt };
+        if (albyUrl) updates.albyHubUrl = albyUrl;
+        if (albyToken) updates.albyAuthToken = albyToken;
+        await api.updateEvent(activeEventId, updates);
+        ctx.showToast("Evento actualizado");
+      } else {
+        // Crear nuevo \u2014 Alby Hub es requerido
+        if (!albyUrl || !albyToken) {
+          ctx.showToast("Ingres\u00e1 la URL y token de Alby Hub");
+          return;
+        }
+        const data = await api.createEvent({
+          name,
+          date,
+          welcomeSats: sats,
+          maxAttendees: maxAtt,
+          albyHubUrl: albyUrl,
+          albyAuthToken: albyToken,
+        });
+        activeEventId = data.event.id;
+        ctx.showToast("Evento creado");
+      }
+    } catch (err) {
+      ctx.showToast("Error: " + err.message);
+      return;
     }
-    setEventInfo(evt.id, { name, date, welcomeSats: sats });
-    activeEventId = evt.id;
-    ctx.showToast("Evento creado");
+  } else {
+    // localStorage fallback
+    if (activeEventId) {
+      updateLocalEvent(pubkey, activeEventId, {
+        name,
+        date,
+        welcomeSats: sats,
+        maxAttendees: maxAtt,
+      });
+      setEventInfo(activeEventId, { name, date, welcomeSats: sats });
+      ctx.showToast("Evento actualizado (local)");
+    } else {
+      const evt = createLocalEvent(pubkey, { name, date, welcomeSats: sats, maxAttendees: maxAtt });
+      setEventInfo(evt.id, { name, date, welcomeSats: sats });
+      activeEventId = evt.id;
+      ctx.showToast("Evento creado (local)");
+    }
   }
 
   showEventsList();
 }
 
-function handleDeleteEvent() {
+async function handleDeleteEvent() {
   if (!activeEventId) return;
 
-  const state = ctx.getState();
-  deleteEvent(state.adminPubkey, activeEventId);
-  activeEventId = null;
+  if (!confirm("\u00bfEliminar este evento? Esta acci\u00f3n no se puede deshacer.")) return;
 
-  ctx.showToast("Evento eliminado");
+  if (_backendOk) {
+    try {
+      await api.deleteEvent(activeEventId);
+      ctx.showToast("Evento archivado");
+    } catch (err) {
+      ctx.showToast("Error: " + err.message);
+      return;
+    }
+  } else {
+    const state = ctx.getState();
+    deleteLocalEvent(state.adminPubkey, activeEventId);
+    ctx.showToast("Evento eliminado");
+  }
+
+  activeEventId = null;
   showEventsList();
 }
 
-function handleCloseEvent() {
+async function handleCloseEvent() {
   if (!activeEventId) return;
 
-  if (!confirm("¿Cerrar este evento? Los asistentes ya no podrán registrarse.")) return;
+  if (!confirm("\u00bfCerrar este evento? Los asistentes ya no podr\u00e1n registrarse.")) return;
 
-  const state = ctx.getState();
-  updateEvent(state.adminPubkey, activeEventId, { closed: true });
-  setEventClosed(activeEventId, true);
-  ctx.showToast("Evento cerrado");
+  if (_backendOk) {
+    try {
+      await api.updateEvent(activeEventId, { status: "closed" });
+      ctx.showToast("Evento cerrado");
+    } catch (err) {
+      ctx.showToast("Error: " + err.message);
+      return;
+    }
+  } else {
+    const state = ctx.getState();
+    updateLocalEvent(state.adminPubkey, activeEventId, { closed: true });
+    setEventClosed(activeEventId, true);
+    ctx.showToast("Evento cerrado");
+  }
+
   showEventForm(activeEventId);
 }
 
-function handleReopenEvent() {
+async function handleReopenEvent() {
   if (!activeEventId) return;
 
-  const state = ctx.getState();
-  updateEvent(state.adminPubkey, activeEventId, { closed: false });
-  setEventClosed(activeEventId, false);
-  ctx.showToast("Evento reabierto");
+  if (_backendOk) {
+    try {
+      await api.updateEvent(activeEventId, { status: "active" });
+      ctx.showToast("Evento reabierto");
+    } catch (err) {
+      ctx.showToast("Error: " + err.message);
+      return;
+    }
+  } else {
+    const state = ctx.getState();
+    updateLocalEvent(state.adminPubkey, activeEventId, { closed: false });
+    setEventClosed(activeEventId, false);
+    ctx.showToast("Evento reabierto");
+  }
+
   showEventForm(activeEventId);
 }
 
@@ -634,29 +831,55 @@ function handleCopyLink() {
   });
 }
 
-async function handleTestNwc() {
-  const nwcUrl = document.getElementById("admin-nwc-url")?.value?.trim();
-  const statusEl = document.getElementById("admin-nwc-status");
+async function handleTestAlby() {
+  const albyUrl = document.getElementById("admin-alby-url")?.value?.trim();
+  const albyToken = document.getElementById("admin-alby-token")?.value?.trim();
+  const statusEl = document.getElementById("admin-alby-status");
 
-  if (!nwcUrl) {
-    if (statusEl) statusEl.innerHTML = '<span style="color:var(--orange)">Pegá una NWC URL primero</span>';
+  if (!albyUrl || !albyToken) {
+    if (statusEl) statusEl.innerHTML = '<span style="color:var(--orange)">Ingres\u00e1 URL y token del Alby Hub</span>';
     return;
   }
 
   if (statusEl) statusEl.innerHTML = '<span style="color:var(--muted)">Conectando...</span>';
 
   try {
-    await ctx.nwcService.connect(nwcUrl);
-    const balance = await ctx.nwcService.getBalance();
-    if (statusEl) {
-      statusEl.innerHTML = `<span style="color:var(--green)">Conectado — Balance: ${balance.toLocaleString()} sats</span>`;
+    const data = await api.testAlbyConnection(albyUrl, albyToken);
+
+    if (data.ok) {
+      if (statusEl) {
+        statusEl.innerHTML = `<span style="color:var(--green)">Conectado \u2014 ${data.appCount ?? 0} apps existentes</span>`;
+      }
+      ctx.showToast("Alby Hub conectado");
+    } else {
+      throw new Error(data.error || "Conexión fallida");
     }
-    ctx.showToast("NWC conectado");
   } catch (err) {
     if (statusEl) {
       statusEl.innerHTML = `<span style="color:#ff4444">Error: ${err.message}</span>`;
     }
   }
+}
+
+// ══════════════════════════════════════════════════
+// HELPERS
+// ══════════════════════════════════════════════════
+
+/** Map backend event → frontend format */
+function apiEventToLocal(apiEvt) {
+  return {
+    id: apiEvt.id,
+    name: apiEvt.name,
+    date: apiEvt.date,
+    code: apiEvt.code,
+    welcomeSats: apiEvt.welcomeSats,
+    maxAttendees: apiEvt.maxAttendees,
+    closed: apiEvt.status === "closed",
+    hasAlbyConfig: apiEvt.hasAlbyConfig,
+    attendees: apiEvt.attendeeCount || 0,
+    satsDistributed: 0,
+    createdAt: apiEvt.createdAt,
+  };
 }
 
 // ══════════════════════════════════════════════════
