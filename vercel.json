@@ -13,6 +13,10 @@
       "destination": "/api/[...route]"
     },
     {
+      "source": "/.well-known/lnurlp/(.*)",
+      "destination": "/api/[...route]"
+    },
+    {
       "source": "/onboard/:code",
       "destination": "/index.html"
     }
