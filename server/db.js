@@ -3,7 +3,6 @@
 //  Works on Vercel serverless + local dev
 // ═══════════════════════════════════════
 
-import initSqlJs from "sql.js";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -48,6 +47,7 @@ async function _initDBInternal() {
     // Fallback: let sql.js find it automatically
   }
 
+  const { default: initSqlJs } = await import("sql.js");
   const SQL = await initSqlJs({
     ...(wasmBinary ? { wasmBinary } : {}),
   });
