@@ -9,7 +9,7 @@ onboard.get("/:code", async (c) => {
   const db = c.get("db");
   const code = c.req.param("code");
 
-  const event = db
+  const event = await db
     .prepare(
       "SELECT id, name, date, code, welcome_sats, max_attendees, status FROM events WHERE code = ?"
     )
@@ -31,7 +31,7 @@ onboard.get("/:code", async (c) => {
   }
 
   // Check capacity
-  const count = db
+  const count = await db
     .prepare("SELECT COUNT(*) as cnt FROM attendees WHERE event_id = ?")
     .get(event.id);
 
@@ -69,7 +69,7 @@ onboard.post("/:code/claim", async (c) => {
     return c.json({ error: "Nombre requerido" }, 400);
   }
 
-  const event = db.prepare("SELECT * FROM events WHERE code = ?").get(code);
+  const event = await db.prepare("SELECT * FROM events WHERE code = ?").get(code);
 
   if (!event) {
     return c.json({ error: "Evento no encontrado" }, 404);
@@ -83,7 +83,7 @@ onboard.post("/:code/claim", async (c) => {
   }
 
   // Check capacity
-  const count = db
+  const count = await db
     .prepare("SELECT COUNT(*) as cnt FROM attendees WHERE event_id = ?")
     .get(event.id);
 
@@ -130,10 +130,10 @@ onboard.post("/:code/claim", async (c) => {
   const finalLightningAddress = lud16 || lightningAddress;
 
   try {
-    const result = db
+    const result = await db
       .prepare(
         `INSERT INTO attendees (event_id, token, display_name, lightning_address, nwc_url, wallet_pubkey, balance_sats, welcome_funded)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
       )
       .run(
         event.id,
@@ -146,7 +146,7 @@ onboard.post("/:code/claim", async (c) => {
         nwcUrl ? 0 : 1 // not funded yet if real wallet
       );
 
-    const attendee = db
+    const attendee = await db
       .prepare("SELECT * FROM attendees WHERE id = ?")
       .get(result.lastInsertRowid);
 

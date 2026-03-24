@@ -34,24 +34,27 @@ app.get("/api/health", (c) => {
   });
 });
 
-// Routes that DON'T need DB (prices fetches live, no DB required)
+// Prices route BEFORE DB middleware (doesn't need DB)
 app.route("/api/prices", priceRoutes);
 
-// DB middleware — only for routes that need it
-const dbMiddleware = async (c, next) => {
+// DB middleware — lazy init, cached
+app.use("/api/*", async (c, next) => {
+  // Skip if already set (prices route doesn't need it)
+  if (c.get("db")) return next();
   if (!dbPromise) dbPromise = initDB();
   const db = await dbPromise;
   c.set("db", db);
   await next();
-};
+});
 
-app.use("/api/auth/*", dbMiddleware);
-app.use("/api/events/*", dbMiddleware);
-app.use("/api/onboard/*", dbMiddleware);
-app.use("/api/attendees/*", dbMiddleware);
-app.use("/.well-known/*", dbMiddleware);
+app.use("/.well-known/*", async (c, next) => {
+  if (!dbPromise) dbPromise = initDB();
+  const db = await dbPromise;
+  c.set("db", db);
+  await next();
+});
 
-// ── Routes (DB-dependent) ──
+// ── Routes ──
 app.route("/api/auth", authRoutes);
 app.route("/api/events", eventRoutes);
 app.route("/api/onboard", onboardRoutes);

@@ -51,14 +51,14 @@ export function requireAttendee() {
 
     const token = header.slice(7);
     const db = c.get("db");
-    const attendee = db.prepare("SELECT * FROM attendees WHERE token = ?").get(token);
+    const attendee = await db.prepare("SELECT * FROM attendees WHERE token = ?").get(token);
 
     if (!attendee) {
       return c.json({ error: "Token de attendee inválido" }, 401);
     }
 
     // Update last seen
-    db.prepare("UPDATE attendees SET last_seen_at = datetime('now') WHERE id = ?").run(attendee.id);
+    await db.prepare("UPDATE attendees SET last_seen_at = NOW() WHERE id = ?").run(attendee.id);
     c.set("attendee", attendee);
     await next();
   };

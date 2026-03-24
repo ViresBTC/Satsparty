@@ -8,24 +8,24 @@ const auth = new Hono();
  * Ensure admin record exists in DB.
  * First Nostr key to log in becomes the admin.
  */
-function getOrCreateAdmin(db, pubkey) {
+async function getOrCreateAdmin(db, pubkey) {
   // Check if this pubkey is already admin
-  let admin = db
+  let admin = await db
     .prepare("SELECT * FROM admins WHERE username = ?")
     .get(pubkey);
 
   if (admin) return admin;
 
   // Check if ANY admin exists
-  const anyAdmin = db.prepare("SELECT * FROM admins LIMIT 1").get();
+  const anyAdmin = await db.prepare("SELECT * FROM admins LIMIT 1").get();
 
   if (!anyAdmin) {
     // First login ever — this pubkey becomes admin
-    db.prepare(
+    await db.prepare(
       "INSERT INTO admins (username, password_hash) VALUES (?, 'nostr')"
     ).run(pubkey);
     console.log(`⚡ Admin registrado: ${pubkey.slice(0, 12)}...`);
-    return db.prepare("SELECT * FROM admins WHERE username = ?").get(pubkey);
+    return await db.prepare("SELECT * FROM admins WHERE username = ?").get(pubkey);
   }
 
   // Admin exists but different pubkey
@@ -57,7 +57,7 @@ auth.post("/nostr", async (c) => {
   const pubkey = event.pubkey;
 
   // Get or register admin
-  const admin = getOrCreateAdmin(db, pubkey);
+  const admin = await getOrCreateAdmin(db, pubkey);
   if (!admin) {
     return c.json(
       { error: "Esta clave no tiene permisos de administrador" },
@@ -92,12 +92,12 @@ auth.post("/login", async (c) => {
   }
 
   // Demo fallback: create generic admin if none exists
-  let admin = db.prepare("SELECT * FROM admins LIMIT 1").get();
+  let admin = await db.prepare("SELECT * FROM admins LIMIT 1").get();
   if (!admin) {
-    db.prepare(
+    await db.prepare(
       "INSERT INTO admins (username, password_hash) VALUES ('admin', 'demo')"
     ).run();
-    admin = db.prepare("SELECT * FROM admins LIMIT 1").get();
+    admin = await db.prepare("SELECT * FROM admins LIMIT 1").get();
   }
 
   const token = signToken({ id: admin.id, username: admin.username });

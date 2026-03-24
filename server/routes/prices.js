@@ -12,7 +12,7 @@ prices.get("/", async (c) => {
     try {
       const db = c.get("db");
       if (db) {
-        db.prepare(
+        await db.prepare(
           "UPDATE price_cache SET btc_usd = ?, usd_ars = ?, updated_at = ? WHERE id = 1"
         ).run(data.btcUsd, data.usdArs, data.updatedAt);
       }
@@ -28,7 +28,7 @@ prices.get("/", async (c) => {
     try {
       const db = c.get("db");
       if (db) {
-        const row = db
+        const row = await db
           .prepare("SELECT btc_usd, usd_ars, updated_at FROM price_cache WHERE id = 1")
           .get();
         if (row) {

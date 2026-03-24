@@ -1,23 +1,22 @@
 // ═══════════════════════════════════════
-//  SatsParty — Database (sql.js / WASM SQLite)
+//  SatsParty — Database (PostgreSQL via Neon)
 //  Works on Vercel serverless + local dev
 // ═══════════════════════════════════════
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
-import { join, dirname } from "path";
-import { fileURLToPath } from "url";
-import { createRequire } from "module";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const require = createRequire(import.meta.url);
-
-const IS_VERCEL = !!process.env.VERCEL;
-const DB_PATH = IS_VERCEL
-  ? "/tmp/satsparty.db"
-  : join(__dirname, "..", "data", "satsparty.db");
+import { neon } from "@neondatabase/serverless";
 
 let _db = null;
 let _initPromise = null;
+
+/**
+ * Convert SQLite-style ? placeholders to PostgreSQL $1, $2, ...
+ */
+function convertPlaceholders(sql) {
+  // If query already uses $1-style placeholders, don't convert
+  if (/\$\d/.test(sql)) return sql;
+  let i = 0;
+  return sql.replace(/\?/g, () => `$${++i}`);
+}
 
 /**
  * Initialize the database (async, cached).
@@ -33,149 +32,92 @@ export async function initDB() {
 }
 
 async function _initDBInternal() {
-  // Ensure data directory exists (local only)
-  if (!IS_VERCEL) {
-    mkdirSync(join(__dirname, "..", "data"), { recursive: true });
+  const databaseUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+
+  if (!databaseUrl) {
+    throw new Error(
+      "DATABASE_URL or POSTGRES_URL environment variable is required. " +
+      "Create a free Neon database at https://neon.tech and set the connection string."
+    );
   }
 
-  // Locate the WASM file explicitly for Vercel serverless
-  let wasmBinary;
-  try {
-    const wasmPath = require.resolve("sql.js/dist/sql-wasm.wasm");
-    wasmBinary = readFileSync(wasmPath);
-  } catch {
-    // Fallback: let sql.js find it automatically
-  }
-
-  const { default: initSqlJs } = await import("sql.js");
-  const SQL = await initSqlJs({
-    ...(wasmBinary ? { wasmBinary } : {}),
-  });
-
-  let sqlDb;
-  try {
-    if (existsSync(DB_PATH)) {
-      const data = readFileSync(DB_PATH);
-      sqlDb = new SQL.Database(data);
-    } else {
-      sqlDb = new SQL.Database();
-    }
-  } catch {
-    sqlDb = new SQL.Database();
-  }
-
-  // Run pragmas
-  sqlDb.run("PRAGMA foreign_keys = ON");
+  const sql = neon(databaseUrl);
 
   // Run migrations
-  migrate(sqlDb);
+  await migrate(sql);
 
-  // Save after migration
-  save(sqlDb);
+  console.log("✓ Database ready (PostgreSQL via Neon)");
 
-  console.log("✓ Database ready (sql.js WASM)");
-
-  return createWrapper(sqlDb);
-}
-
-/**
- * Persist the DB to disk
- */
-function save(sqlDb) {
-  try {
-    const data = sqlDb.export();
-    writeFileSync(DB_PATH, Buffer.from(data));
-  } catch (err) {
-    console.error("DB save error:", err.message);
-  }
+  return createWrapper(sql);
 }
 
 /**
  * Create a wrapper with better-sqlite3-compatible API
- * so all existing route code works without changes.
+ * so all existing route code works with MINIMAL changes.
+ *
+ * Key difference: all methods are now ASYNC (return promises).
+ * Routes must use: await db.prepare("...").get(...)
  */
-function createWrapper(sqlDb) {
+function createWrapper(sql) {
   const wrapper = {
-    prepare(sql) {
+    prepare(query) {
+      const pgQuery = convertPlaceholders(query);
+
       return {
         /**
-         * Get a single row: .get(param1, param2, ...)
+         * Get a single row: await .get(param1, param2, ...)
          */
-        get(...params) {
+        async get(...params) {
           try {
-            const stmt = sqlDb.prepare(sql);
-            if (params.length) stmt.bind(params);
-            if (stmt.step()) {
-              const cols = stmt.getColumnNames();
-              const vals = stmt.get();
-              const row = {};
-              cols.forEach((c, i) => (row[c] = vals[i]));
-              stmt.free();
-              return row;
-            }
-            stmt.free();
-            return undefined;
+            const rows = await sql(pgQuery, params);
+            return rows[0] || undefined;
           } catch (err) {
-            console.error("DB get error:", err.message, sql);
+            console.error("DB get error:", err.message, pgQuery);
             return undefined;
           }
         },
 
         /**
-         * Get all rows: .all(param1, param2, ...)
+         * Get all rows: await .all(param1, param2, ...)
          */
-        all(...params) {
+        async all(...params) {
           try {
-            const results = [];
-            const stmt = sqlDb.prepare(sql);
-            if (params.length) stmt.bind(params);
-            while (stmt.step()) {
-              const cols = stmt.getColumnNames();
-              const vals = stmt.get();
-              const row = {};
-              cols.forEach((c, i) => (row[c] = vals[i]));
-              results.push(row);
-            }
-            stmt.free();
-            return results;
+            return await sql(pgQuery, params);
           } catch (err) {
-            console.error("DB all error:", err.message, sql);
+            console.error("DB all error:", err.message, pgQuery);
             return [];
           }
         },
 
         /**
-         * Execute a write: .run(param1, param2, ...)
+         * Execute a write: await .run(param1, param2, ...)
          * Returns { changes, lastInsertRowid }
          */
-        run(...params) {
+        async run(...params) {
           try {
-            sqlDb.run(sql, params);
-            const rowid = sqlDb.exec("SELECT last_insert_rowid()");
-            const lastInsertRowid =
-              rowid.length > 0 ? rowid[0].values[0][0] : 0;
-            const changes = sqlDb.getRowsModified();
-            save(sqlDb); // Auto-save after writes
+            const result = await sql(pgQuery, params);
+            // For INSERT with RETURNING, the id is in the first row
+            const lastInsertRowid = result[0]?.id || 0;
+            const changes = result.length || 0;
             return { changes, lastInsertRowid };
           } catch (err) {
-            console.error("DB run error:", err.message, sql);
+            console.error("DB run error:", err.message, pgQuery);
             throw err;
           }
         },
       };
     },
 
-    exec(sql) {
-      sqlDb.run(sql);
-      save(sqlDb);
+    async exec(query) {
+      try {
+        await sql(query);
+      } catch (err) {
+        console.error("DB exec error:", err.message);
+      }
     },
 
-    pragma(str) {
-      try {
-        sqlDb.run(`PRAGMA ${str}`);
-      } catch {
-        // Some pragmas may not be supported in WASM mode
-      }
+    pragma(_str) {
+      // No-op: PostgreSQL doesn't use PRAGMA
     },
   };
 
@@ -183,21 +125,21 @@ function createWrapper(sqlDb) {
 }
 
 /**
- * Database migrations
+ * Database migrations (PostgreSQL syntax)
  */
-function migrate(sqlDb) {
-  sqlDb.run(`
+async function migrate(sql) {
+  await sql(`
     -- Admins (single admin for now)
     CREATE TABLE IF NOT EXISTS admins (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       username TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
-      created_at TEXT DEFAULT (datetime('now'))
+      created_at TIMESTAMP DEFAULT NOW()
     );
 
     -- Events
     CREATE TABLE IF NOT EXISTS events (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       name TEXT NOT NULL,
       date TEXT NOT NULL,
       code TEXT UNIQUE NOT NULL,
@@ -206,12 +148,12 @@ function migrate(sqlDb) {
       alby_hub_url TEXT NOT NULL,
       alby_auth_token TEXT NOT NULL,
       status TEXT DEFAULT 'active',
-      created_at TEXT DEFAULT (datetime('now'))
+      created_at TIMESTAMP DEFAULT NOW()
     );
 
     -- Attendees
     CREATE TABLE IF NOT EXISTS attendees (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       event_id INTEGER NOT NULL REFERENCES events(id),
       token TEXT UNIQUE NOT NULL,
       display_name TEXT,
@@ -224,8 +166,8 @@ function migrate(sqlDb) {
       missions_completed TEXT DEFAULT '[]',
       onboarding_complete INTEGER DEFAULT 0,
       ip_hash TEXT,
-      created_at TEXT DEFAULT (datetime('now')),
-      last_seen_at TEXT
+      created_at TIMESTAMP DEFAULT NOW(),
+      last_seen_at TIMESTAMP
     );
 
     CREATE INDEX IF NOT EXISTS idx_attendees_event ON attendees(event_id);
@@ -236,12 +178,15 @@ function migrate(sqlDb) {
       id INTEGER PRIMARY KEY DEFAULT 1,
       btc_usd REAL NOT NULL DEFAULT 84210,
       usd_ars REAL NOT NULL DEFAULT 1285,
-      updated_at TEXT DEFAULT (datetime('now'))
+      updated_at TIMESTAMP DEFAULT NOW()
     );
-
-    -- Seed price cache if empty
-    INSERT OR IGNORE INTO price_cache (id, btc_usd, usd_ars) VALUES (1, 84210, 1285);
   `);
+
+  // Seed price cache if empty
+  const existing = await sql`SELECT id FROM price_cache WHERE id = 1`;
+  if (existing.length === 0) {
+    await sql`INSERT INTO price_cache (id, btc_usd, usd_ars) VALUES (1, 84210, 1285)`;
+  }
 
   console.log("✓ Database migrated successfully");
 }

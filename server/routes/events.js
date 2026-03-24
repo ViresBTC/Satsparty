@@ -43,10 +43,10 @@ events.post("/", async (c) => {
   const code = nanoid(8);
 
   try {
-    const result = db
+    const result = await db
       .prepare(
         `INSERT INTO events (name, date, code, welcome_sats, max_attendees, alby_hub_url, alby_auth_token)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`
       )
       .run(
         name,
@@ -58,7 +58,7 @@ events.post("/", async (c) => {
         albyAuthToken
       );
 
-    const event = db
+    const event = await db
       .prepare("SELECT * FROM events WHERE id = ?")
       .get(result.lastInsertRowid);
 
@@ -78,7 +78,7 @@ events.post("/", async (c) => {
 events.get("/", async (c) => {
   const db = c.get("db");
 
-  const rows = db
+  const rows = await db
     .prepare(
       `SELECT e.*,
         (SELECT COUNT(*) FROM attendees WHERE event_id = e.id) as attendee_count,
@@ -101,13 +101,13 @@ events.get("/:id", async (c) => {
   const db = c.get("db");
   const id = c.req.param("id");
 
-  const event = db.prepare("SELECT * FROM events WHERE id = ?").get(id);
+  const event = await db.prepare("SELECT * FROM events WHERE id = ?").get(id);
   if (!event) {
     return c.json({ error: "Evento no encontrado" }, 404);
   }
 
   // Get stats
-  const stats = db
+  const stats = await db
     .prepare(
       `SELECT
         COUNT(*) as total_attendees,
@@ -134,12 +134,12 @@ events.get("/:id/attendees", async (c) => {
   const db = c.get("db");
   const id = c.req.param("id");
 
-  const event = db.prepare("SELECT id FROM events WHERE id = ?").get(id);
+  const event = await db.prepare("SELECT id FROM events WHERE id = ?").get(id);
   if (!event) {
     return c.json({ error: "Evento no encontrado" }, 404);
   }
 
-  const rows = db
+  const rows = await db
     .prepare(
       `SELECT id, display_name, lightning_address, balance_sats,
               welcome_funded, missions_completed, onboarding_complete,
@@ -172,7 +172,7 @@ events.patch("/:id", async (c) => {
   const id = c.req.param("id");
   const body = await c.req.json();
 
-  const event = db.prepare("SELECT * FROM events WHERE id = ?").get(id);
+  const event = await db.prepare("SELECT * FROM events WHERE id = ?").get(id);
   if (!event) {
     return c.json({ error: "Evento no encontrado" }, 404);
   }
@@ -199,10 +199,11 @@ events.patch("/:id", async (c) => {
 
   const sets = [];
   const values = [];
+  let paramIndex = 1;
 
   for (const key of allowed) {
     if (body[key] !== undefined) {
-      sets.push(`${dbFieldMap[key]} = ?`);
+      sets.push(`${dbFieldMap[key]} = $${paramIndex++}`);
       values.push(body[key]);
     }
   }
@@ -212,11 +213,12 @@ events.patch("/:id", async (c) => {
   }
 
   values.push(id);
-  db.prepare(`UPDATE events SET ${sets.join(", ")} WHERE id = ?`).run(
-    ...values
-  );
+  // Use raw neon query for dynamic parameterized update
+  await db.prepare(
+    `UPDATE events SET ${sets.join(", ")} WHERE id = $${paramIndex}`
+  ).run(...values);
 
-  const updated = db.prepare("SELECT * FROM events WHERE id = ?").get(id);
+  const updated = await db.prepare("SELECT * FROM events WHERE id = ?").get(id);
   return c.json({ event: sanitizeEvent(updated) });
 });
 
@@ -225,12 +227,12 @@ events.delete("/:id", async (c) => {
   const db = c.get("db");
   const id = c.req.param("id");
 
-  const event = db.prepare("SELECT id FROM events WHERE id = ?").get(id);
+  const event = await db.prepare("SELECT id FROM events WHERE id = ?").get(id);
   if (!event) {
     return c.json({ error: "Evento no encontrado" }, 404);
   }
 
-  db.prepare("UPDATE events SET status = 'archived' WHERE id = ?").run(id);
+  await db.prepare("UPDATE events SET status = 'archived' WHERE id = ?").run(id);
   return c.json({ message: "Evento archivado" });
 });
 
