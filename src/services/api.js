@@ -100,6 +100,12 @@ export async function testAlbyConnection(albyHubUrl, albyAuthToken) {
   return request("POST", "/events/test-alby", { albyHubUrl, albyAuthToken });
 }
 
+// ── PRICES ──
+
+export async function fetchPrices() {
+  return request("GET", "/prices");
+}
+
 // ── HEALTH ──
 
 export async function checkHealth() {

@@ -201,7 +201,7 @@ const navMap = {
   "s-history": "nav-history",
   "s-settings": "nav-settings",
 };
-const hideNavScreens = ["s-success", "s-scan", "s-recharge-pesos", "s-recharge-usdt"];
+const hideNavScreens = ["s-success", "s-received", "s-scan", "s-recharge-pesos", "s-recharge-usdt"];
 
 function navTo(id) {
   const curr = document.getElementById(currentView);
@@ -465,13 +465,45 @@ async function generateInvoice() {
     if (ctx.nwcService.isConnected()) {
       // Real invoice
       const inv = await ctx.nwcService.makeInvoice(sats, "SatsParty Invoice");
+      console.log("[Dashboard] makeInvoice returned:", { paymentRequest: inv.paymentRequest?.substring(0, 40), paymentHash: inv.paymentHash });
+
+      if (!inv.paymentRequest) {
+        ctx.showToast("Error: invoice vacío");
+        return;
+      }
+
       const resultEl = document.getElementById("invoice-result");
       const amountEl = document.getElementById("invoice-amount-display");
       const qrEl = document.getElementById("invoice-qr-container");
+      const bolt11El = document.getElementById("invoice-bolt11-preview");
+      const copyBtn = document.getElementById("btn-copy-invoice");
 
       if (amountEl) amountEl.textContent = sats.toLocaleString() + " sats";
-      if (qrEl) qrEl.innerHTML = ctx.generateQRSvg(inv.paymentRequest, 160);
+      if (qrEl) qrEl.innerHTML = ctx.generateQRSvg(inv.paymentRequest.toUpperCase(), 200);
+      if (bolt11El) bolt11El.textContent = inv.paymentRequest;
       if (resultEl) resultEl.style.display = "block";
+
+      // Botón copiar invoice
+      if (copyBtn) {
+        copyBtn.onclick = () => {
+          navigator.clipboard.writeText(inv.paymentRequest).then(() => {
+            ctx.showToast("Invoice copiado ✓");
+            copyBtn.textContent = "Copiado ✓";
+            setTimeout(() => { copyBtn.textContent = "Copiar Invoice"; }, 2000);
+          }).catch(() => {
+            // Fallback para browsers sin clipboard API
+            const ta = document.createElement("textarea");
+            ta.value = inv.paymentRequest;
+            ta.style.position = "fixed";
+            ta.style.opacity = "0";
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand("copy");
+            document.body.removeChild(ta);
+            ctx.showToast("Invoice copiado ✓");
+          });
+        };
+      }
 
       ctx.showToast("Invoice generado ✓");
 
@@ -492,10 +524,31 @@ async function pollInvoice(paymentHash, sats) {
     try {
       const result = await ctx.nwcService.lookupInvoice(paymentHash);
       if (result.paid) {
-        ctx.showToast(`+${sats} sats recibidos ⚡`);
-        ctx.launchLightningBolt();
-        setTimeout(() => ctx.launchConfetti(), 350);
+        // Refresh balance first
         await refreshBalance();
+        const state = ctx.getState();
+
+        // Show received screen
+        const amtEl = document.getElementById("received-amount");
+        const balEl = document.getElementById("received-new-balance");
+        if (amtEl) amtEl.textContent = "+" + sats.toLocaleString();
+        if (balEl) balEl.textContent = (state.balance || 0).toLocaleString() + " sats";
+
+        navTo("s-received");
+
+        // Animations with delay for dramatic effect
+        setTimeout(() => ctx.launchLightningBolt(), 200);
+        setTimeout(() => ctx.launchConfetti(), 600);
+
+        // Wire up the "back to home" button
+        const homeBtn = document.getElementById("btn-received-home");
+        if (homeBtn) {
+          homeBtn.onclick = () => {
+            navTo("s-dashboard");
+            refreshBalance();
+          };
+        }
+
         return;
       }
     } catch (e) {
@@ -874,8 +927,10 @@ function getDashboardHTML() {
         <div class="invoice-result" id="invoice-result">
           <div style="font-family:var(--font-mono);font-size:.55rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:.5rem">Invoice generado</div>
           <div class="invoice-amount-display" id="invoice-amount-display">—</div>
-          <div style="background:#fff;padding:12px;display:inline-block;margin:.8rem 0" id="invoice-qr-container"></div>
-          <div style="font-family:var(--font-mono);font-size:.55rem;color:var(--muted);margin-bottom:.8rem">Escaneá para pagar · Lightning Network</div>
+          <div style="background:#fff;padding:12px;border-radius:12px;display:inline-block;margin:.8rem 0" id="invoice-qr-container"></div>
+          <div style="font-family:var(--font-mono);font-size:.55rem;color:var(--muted);margin-bottom:.6rem">Escaneá para pagar · Lightning Network</div>
+          <div id="invoice-bolt11-preview" style="font-family:var(--font-mono);font-size:.5rem;color:var(--muted);word-break:break-all;max-width:280px;margin:0 auto .6rem;padding:.5rem;background:var(--dim);border:1px solid var(--mid);border-radius:8px;line-height:1.4;max-height:3rem;overflow:hidden;text-overflow:ellipsis"></div>
+          <button id="btn-copy-invoice" style="background:var(--dim);border:1px solid var(--mid);color:var(--electric);font-family:var(--font-mono);font-size:.6rem;letter-spacing:.1em;padding:.5rem 1.2rem;border-radius:8px;cursor:pointer;text-transform:uppercase;transition:all .2s">Copiar Invoice</button>
         </div>
       </div>
     </div>
@@ -950,7 +1005,7 @@ function getDashboardHTML() {
     <div id="scan-fallback" style="padding:0 1.4rem 1.2rem;display:none"><button class="btn-secondary" id="btn-simulate-scan">⚡ Simular escaneo (sin cámara)</button></div>
   </div>
 
-  <!-- SUCCESS -->
+  <!-- SUCCESS (envío) -->
   <div class="screen" id="s-success">
     <div class="success-body">
       <div class="success-icon">⚡</div>
@@ -959,6 +1014,19 @@ function getDashboardHTML() {
       <div class="success-to" id="success-to"></div>
       <div style="font-family:var(--font-mono);font-size:.6rem;color:var(--muted);margin-bottom:2rem">Nuevo saldo: <span id="success-new-balance" style="color:var(--electric)"></span></div>
       <button class="btn-primary" style="max-width:260px" data-close>Volver al inicio ⚡</button>
+    </div>
+  </div>
+
+  <!-- SUCCESS RECEIVED (recepción) -->
+  <div class="screen" id="s-received">
+    <div class="success-body" style="position:relative;overflow:hidden;">
+      <div id="received-glow" style="position:absolute;top:30%;left:50%;width:300px;height:300px;border-radius:50%;background:radial-gradient(circle,rgba(0,255,135,.15),transparent 70%);transform:translate(-50%,-50%);animation:pulseGlow 2s ease-in-out infinite;pointer-events:none;"></div>
+      <div style="font-size:5rem;line-height:1;margin-bottom:.5rem;filter:drop-shadow(0 0 30px rgba(0,255,135,.5));animation:bounceIn .6s cubic-bezier(.22,.68,0,1.2);">⚡</div>
+      <div style="font-family:var(--font-display);font-size:1rem;letter-spacing:.15em;text-transform:uppercase;color:var(--green);margin-bottom:.3rem;opacity:.8;">Pago recibido</div>
+      <div style="font-family:var(--font-display);font-size:4rem;color:var(--white);line-height:.95;margin-bottom:.2rem;" id="received-amount">0</div>
+      <div style="font-family:var(--font-display);font-size:1.8rem;color:var(--electric);margin-bottom:1.5rem;">sats</div>
+      <div style="font-family:var(--font-mono);font-size:.6rem;color:var(--muted);margin-bottom:2.5rem;">Nuevo saldo: <span id="received-new-balance" style="color:var(--electric)"></span></div>
+      <button class="btn-primary" id="btn-received-home" style="max-width:260px;background:linear-gradient(135deg,rgba(0,255,135,.2),rgba(0,212,255,.2));border-color:var(--green);">Volver al inicio ⚡</button>
     </div>
   </div>
 

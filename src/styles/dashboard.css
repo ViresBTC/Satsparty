@@ -591,3 +591,27 @@ input[type=number] { -moz-appearance: textfield; }
   -webkit-backdrop-filter: blur(12px);
   box-shadow: 0 2px 12px rgba(247,255,0,.03);
 }
+
+/* ── RECEIVED SUCCESS SCREEN ── */
+@keyframes bounceIn {
+  0% { opacity: 0; transform: scale(.3); }
+  50% { opacity: 1; transform: scale(1.1); }
+  70% { transform: scale(.95); }
+  100% { transform: scale(1); }
+}
+@keyframes pulseGlow {
+  0%, 100% { opacity: .4; transform: translate(-50%,-50%) scale(1); }
+  50% { opacity: .7; transform: translate(-50%,-50%) scale(1.15); }
+}
+@keyframes receivedSlideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+#s-received .success-body > *:not(#received-glow) {
+  position: relative; z-index: 1;
+}
+#s-received .success-body > div:nth-child(3) { animation: receivedSlideUp .5s ease .2s both; }
+#s-received .success-body > div:nth-child(4) { animation: receivedSlideUp .5s ease .35s both; }
+#s-received .success-body > div:nth-child(5) { animation: receivedSlideUp .5s ease .45s both; }
+#s-received .success-body > div:nth-child(6) { animation: receivedSlideUp .5s ease .55s both; }
+#s-received .success-body > button { animation: receivedSlideUp .5s ease .7s both; }

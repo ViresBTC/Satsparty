@@ -3,6 +3,9 @@
  *
  * Wrapper sobre @getalby/sdk para todas las operaciones Lightning.
  * Maneja conexión, balance, invoices, pagos e historial.
+ *
+ * NOTA: @getalby/sdk v3.x usa el protocolo NIP-47 que trabaja en MILLISATS.
+ * Este wrapper convierte a/desde SATS para la UI.
  */
 
 import { nwc } from "@getalby/sdk";
@@ -27,6 +30,7 @@ export async function connect(nwcUrl) {
   });
 
   const info = await client.getInfo();
+  console.log("[NWC] Connected:", info.alias || "wallet", "| methods:", info.methods?.join(", ") || "unknown");
 
   return {
     alias: info.alias || "SatsParty Wallet",
@@ -42,7 +46,8 @@ export async function connect(nwcUrl) {
 export async function getBalance() {
   ensureConnected();
   const result = await client.getBalance();
-  // NWC devuelve balance en millisats
+  // NIP-47 devuelve balance en millisats → convertir a sats
+  console.log("[NWC] getBalance raw (msats):", result.balance);
   return Math.floor(result.balance / 1000);
 }
 
@@ -54,15 +59,29 @@ export async function getBalance() {
  */
 export async function makeInvoice(amountSats, description = "SatsParty") {
   ensureConnected();
+
+  // NIP-47 espera amount en millisats
+  const amountMsats = amountSats * 1000;
+  console.log("[NWC] makeInvoice:", amountSats, "sats =", amountMsats, "msats");
+
   const result = await client.makeInvoice({
-    amount: amountSats * 1000, // convertir a millisats
+    amount: amountMsats,
     description,
   });
 
-  return {
-    paymentRequest: result.paymentRequest,
-    paymentHash: result.paymentHash,
-  };
+  console.log("[NWC] makeInvoice response keys:", Object.keys(result));
+  console.log("[NWC] makeInvoice invoice field:", result.invoice ? "present (" + result.invoice.substring(0, 30) + "...)" : "MISSING");
+
+  // NIP-47 Nip47Transaction: campo "invoice" contiene el bolt11 string
+  const paymentRequest = result.invoice;
+  const paymentHash = result.payment_hash;
+
+  if (!paymentRequest) {
+    console.error("[NWC] makeInvoice: no 'invoice' field in response:", JSON.stringify(result));
+    throw new Error("El wallet no devolvió un invoice válido");
+  }
+
+  return { paymentRequest, paymentHash };
 }
 
 /**
@@ -72,12 +91,17 @@ export async function makeInvoice(amountSats, description = "SatsParty") {
  */
 export async function payInvoice(invoice) {
   ensureConnected();
+  console.log("[NWC] payInvoice:", invoice.substring(0, 30) + "...");
+
   const result = await client.payInvoice({
     invoice,
   });
 
+  console.log("[NWC] payInvoice result:", result);
+
   return {
     preimage: result.preimage,
+    // fees_paid en millisats → convertir a sats
     feesPaid: Math.floor((result.fees_paid || 0) / 1000),
   };
 }
@@ -85,7 +109,7 @@ export async function payInvoice(invoice) {
 /**
  * Verificar estado de un invoice
  * @param {string} paymentHash
- * @returns {Promise<{paid: boolean, preimage: string|null}>}
+ * @returns {Promise<{paid: boolean, preimage: string|null, amount: number}>}
  */
 export async function lookupInvoice(paymentHash) {
   ensureConnected();
@@ -96,6 +120,7 @@ export async function lookupInvoice(paymentHash) {
   return {
     paid: result.settled_at != null,
     preimage: result.preimage || null,
+    // amount en millisats → sats
     amount: Math.floor((result.amount || 0) / 1000),
   };
 }
@@ -115,6 +140,7 @@ export async function listTransactions(limit = 20) {
 
   return result.transactions.map((tx) => ({
     type: tx.type === "incoming" ? "in" : "out",
+    // amount en millisats → sats
     amount: Math.floor((tx.amount || 0) / 1000),
     description: tx.description || "",
     timestamp: tx.settled_at || tx.created_at || 0,

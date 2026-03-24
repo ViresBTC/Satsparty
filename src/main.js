@@ -6,6 +6,7 @@
  */
 
 import * as nwcService from "./services/nwc.js";
+import * as api from "./services/api.js";
 import { loadState, getState, setState, satsToUsd, satsToArs, isEventClosed, getEventInfo } from "./services/state.js";
 import { generateQRSvg } from "./services/qr.js";
 import { renderOnboarding } from "./onboarding.js";
@@ -53,6 +54,9 @@ function init() {
     } else {
       startOnboarding();
     }
+    // Fetch live prices (non-blocking)
+    updatePrices();
+
     console.log("[SatsParty] Init OK");
   } catch (err) {
     console.error("[SatsParty] Error:", err);
@@ -64,6 +68,19 @@ if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", init);
 } else {
   init();
+}
+
+// ── PRICES ──
+async function updatePrices() {
+  try {
+    const data = await api.fetchPrices();
+    if (data.btcUsd && data.usdArs) {
+      setState({ btcUsd: data.btcUsd, usdArs: data.usdArs });
+      console.log(`[SatsParty] Precios: BTC/USD $${data.btcUsd.toLocaleString()} | USD/ARS $${Math.round(data.usdArs).toLocaleString()}`);
+    }
+  } catch (err) {
+    console.warn("[SatsParty] No se pudieron cargar precios:", err.message);
+  }
 }
 
 // ── ROUTING ──
