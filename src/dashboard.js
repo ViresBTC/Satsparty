@@ -147,6 +147,7 @@ function setupDashboardEvents() {
     el.addEventListener("click", () => {
       stopScanner();
       resetScanUI();
+      resetReceiveForm();
       navTo("s-dashboard");
     });
   });
@@ -165,7 +166,7 @@ function setupDashboardEvents() {
   // Send inputs
   const destInput = document.getElementById("send-dest");
   const amtInput = document.getElementById("send-amount");
-  if (destInput) destInput.addEventListener("input", updateSendPreview);
+  if (destInput) destInput.addEventListener("input", () => { detectBolt11Input(); updateSendPreview(); });
   if (amtInput) amtInput.addEventListener("input", updateSendPreview);
 
   // Send currency toggle
@@ -178,7 +179,7 @@ function setupDashboardEvents() {
     try {
       const text = await navigator.clipboard.readText();
       const dest = document.getElementById("send-dest");
-      if (dest && text) { dest.value = text.trim(); updateSendPreview(); }
+      if (dest && text) { dest.value = text.trim(); detectBolt11Input(); updateSendPreview(); }
     } catch { ctx.showToast("No se pudo pegar"); }
   });
 
@@ -241,12 +242,27 @@ async function refreshBalance() {
 function updateBalanceDisplay() {
   const state = ctx.getState();
   const balEl = document.getElementById("dash-balance");
-  if (balEl) balEl.textContent = state.balance;
-
   const unitEl = document.getElementById("balance-unit");
-  if (unitEl) unitEl.textContent = "SATS";
+  const fiatEl = document.getElementById("dash-fiat");
 
-  currencyIdx = 0;
+  // Respetar la moneda seleccionada actualmente
+  const satPrice = (state.btcUsd / 100_000_000);
+
+  if (currencyIdx === 0) {
+    if (balEl) balEl.textContent = "₿" + (state.balance || 0).toLocaleString();
+    if (unitEl) unitEl.textContent = "SATS";
+    if (fiatEl) fiatEl.innerHTML = '<span style="opacity:.4">Tocá para cambiar moneda</span>';
+  } else if (currencyIdx === 1) {
+    const usd = ctx.satsToUsd(state.balance).toFixed(4);
+    if (balEl) balEl.textContent = "$" + usd;
+    if (unitEl) unitEl.textContent = "USD";
+    if (fiatEl) fiatEl.innerHTML = `<span style="color:var(--green)">1 sat ≈ $${satPrice.toFixed(6)} USD</span>`;
+  } else {
+    const ars = Math.round(ctx.satsToArs(state.balance)).toLocaleString();
+    if (balEl) balEl.textContent = "$" + ars;
+    if (unitEl) unitEl.textContent = "ARS";
+    if (fiatEl) fiatEl.innerHTML = `<span style="color:var(--orange)">1 sat ≈ $${(satPrice * state.usdArs).toFixed(4)} ARS</span>`;
+  }
 }
 
 function cycleCurrency() {
@@ -405,6 +421,24 @@ function timeAgo(timestamp) {
 
 // ── RECEIVE ──
 
+function resetReceiveForm() {
+  const input = document.getElementById("invoice-amount");
+  const resultEl = document.getElementById("invoice-result");
+  const qrEl = document.getElementById("invoice-qr-container");
+  const bolt11El = document.getElementById("invoice-bolt11-preview");
+  const amountEl = document.getElementById("invoice-amount-display");
+  const convEl = document.getElementById("inv-conversion");
+  const copyBtn = document.getElementById("btn-copy-invoice");
+
+  if (input) input.value = "";
+  if (resultEl) resultEl.style.display = "none";
+  if (qrEl) qrEl.innerHTML = "";
+  if (bolt11El) bolt11El.textContent = "";
+  if (amountEl) amountEl.textContent = "—";
+  if (convEl) convEl.textContent = "";
+  if (copyBtn) { copyBtn.textContent = "Copiar Invoice"; copyBtn.onclick = null; }
+}
+
 function switchTab(tab) {
   document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
   document.getElementById(tab === "address" ? "tab-address-btn" : "tab-invoice-btn")?.classList.add("active");
@@ -528,7 +562,9 @@ async function pollInvoice(paymentHash, sats) {
         await refreshBalance();
         const state = ctx.getState();
 
-        // Show received screen
+        // Reset receive form and show received screen
+        resetReceiveForm();
+
         const amtEl = document.getElementById("received-amount");
         const balEl = document.getElementById("received-new-balance");
         if (amtEl) amtEl.textContent = "+" + sats.toLocaleString();
@@ -558,6 +594,79 @@ async function pollInvoice(paymentHash, sats) {
 }
 
 // ── SEND ──
+
+/**
+ * Detectar si un string es un bolt11 invoice y extraer el monto.
+ * Bolt11 format: lnbc[amount][multiplier]1... o lnbc1... (zero-amount)
+ * Multipliers: m=milli(0.001), u=micro(0.000001), n=nano(0.000000001), p=pico(0.000000000001)
+ */
+function decodeBolt11Amount(invoice) {
+  if (!invoice) return null;
+  const raw = invoice.toLowerCase().trim();
+  if (!raw.startsWith("lnbc") && !raw.startsWith("lntb") && !raw.startsWith("lnbcrt")) return null;
+
+  // Extract the prefix before the "1" separator
+  // Format: ln + network(bc/tb/bcrt) + [amount+multiplier] + "1" + data
+  const prefix = raw.startsWith("lnbcrt") ? "lnbcrt" : raw.startsWith("lnbc") ? "lnbc" : "lntb";
+  const afterPrefix = raw.substring(prefix.length);
+
+  // Find the "1" separator — it's the last "1" before bech32 data
+  // The amount+multiplier is between prefix and "1"
+  const match = afterPrefix.match(/^(\d+)([munp]?)1/);
+  if (!match) return { isBolt11: true, amountSats: null }; // zero-amount invoice
+
+  const num = parseInt(match[1], 10);
+  const multiplier = match[2];
+
+  // Convert to BTC then to sats
+  const multipliers = { "": 1, "m": 0.001, "u": 0.000001, "n": 0.000000001, "p": 0.000000000001 };
+  const btcAmount = num * (multipliers[multiplier] || 1);
+  const sats = Math.round(btcAmount * 100_000_000);
+
+  return { isBolt11: true, amountSats: sats > 0 ? sats : null };
+}
+
+let invoiceDetected = false; // track if we auto-filled from bolt11
+
+function detectBolt11Input() {
+  const destInput = document.getElementById("send-dest");
+  const amtInput = document.getElementById("send-amount");
+  const amtSection = document.getElementById("send-amount-section");
+  const invoiceInfo = document.getElementById("send-invoice-info");
+  const val = destInput?.value?.trim() || "";
+
+  const decoded = decodeBolt11Amount(val);
+
+  if (decoded && decoded.isBolt11 && decoded.amountSats) {
+    // Invoice con monto — auto-fill y lockear campo de monto
+    if (amtInput) { amtInput.value = decoded.amountSats; amtInput.disabled = true; }
+    setSendCurrency(0); // forzar SATS
+    invoiceDetected = true;
+
+    // Mostrar info del invoice detectado
+    if (invoiceInfo) {
+      invoiceInfo.style.display = "flex";
+      invoiceInfo.innerHTML = `<span style="color:var(--green)">⚡ Invoice detectado</span><span style="color:var(--electric)">${decoded.amountSats.toLocaleString()} sats</span>`;
+    }
+    // Ocultar selectores de moneda
+    if (amtSection) amtSection.style.opacity = "0.4";
+  } else if (decoded && decoded.isBolt11 && !decoded.amountSats) {
+    // Invoice sin monto — dejar que el usuario ponga monto
+    if (amtInput) amtInput.disabled = false;
+    invoiceDetected = true;
+    if (invoiceInfo) {
+      invoiceInfo.style.display = "flex";
+      invoiceInfo.innerHTML = `<span style="color:var(--green)">⚡ Invoice detectado</span><span style="color:var(--muted)">Sin monto fijo</span>`;
+    }
+    if (amtSection) amtSection.style.opacity = "1";
+  } else {
+    // Lightning address u otro — comportamiento normal
+    if (amtInput) amtInput.disabled = false;
+    invoiceDetected = false;
+    if (invoiceInfo) { invoiceInfo.style.display = "none"; invoiceInfo.innerHTML = ""; }
+    if (amtSection) amtSection.style.opacity = "1";
+  }
+}
 
 const SEND_CURRENCIES = ["SATS", "USD", "ARS"];
 
@@ -634,13 +743,17 @@ async function confirmSend() {
 
   try {
     if (ctx.nwcService.isConnected()) {
-      // Resolve Lightning Address to invoice
-      const ln = new LightningAddress(dest);
-      await ln.fetch();
-      const invoice = await ln.requestInvoice({ satoshi: sats });
-
-      // Pay invoice
-      await ctx.nwcService.payInvoice(invoice.paymentRequest);
+      const decoded = decodeBolt11Amount(dest);
+      if (decoded && decoded.isBolt11) {
+        // Pagar bolt11 invoice directamente
+        await ctx.nwcService.payInvoice(dest.trim());
+      } else {
+        // Resolver Lightning Address a invoice
+        const ln = new LightningAddress(dest);
+        await ln.fetch();
+        const invoice = await ln.requestInvoice({ satoshi: sats });
+        await ctx.nwcService.payInvoice(invoice.paymentRequest);
+      }
     }
 
     // Update state
@@ -668,7 +781,12 @@ async function confirmSend() {
     const destInput = document.getElementById("send-dest");
     const amtInput = document.getElementById("send-amount");
     if (destInput) destInput.value = "";
-    if (amtInput) amtInput.value = "";
+    if (amtInput) { amtInput.value = ""; amtInput.disabled = false; }
+    invoiceDetected = false;
+    const invoiceInfo = document.getElementById("send-invoice-info");
+    if (invoiceInfo) { invoiceInfo.style.display = "none"; invoiceInfo.innerHTML = ""; }
+    const amtSection = document.getElementById("send-amount-section");
+    if (amtSection) amtSection.style.opacity = "1";
     document.getElementById("send-preview")?.classList.remove("visible");
     document.getElementById("send-conversion").innerHTML = "";
     setSendCurrency(0);
@@ -929,9 +1047,11 @@ function getDashboardHTML() {
           <div class="invoice-amount-display" id="invoice-amount-display">—</div>
           <div style="background:#fff;padding:12px;border-radius:12px;display:inline-block;margin:.8rem 0" id="invoice-qr-container"></div>
           <div style="font-family:var(--font-mono);font-size:.55rem;color:var(--muted);margin-bottom:.6rem">Escaneá para pagar · Lightning Network</div>
-          <div id="invoice-bolt11-preview" style="font-family:var(--font-mono);font-size:.5rem;color:var(--muted);word-break:break-all;max-width:280px;margin:0 auto .6rem;padding:.5rem;background:var(--dim);border:1px solid var(--mid);border-radius:8px;line-height:1.4;max-height:3rem;overflow:hidden;text-overflow:ellipsis"></div>
+          <div id="invoice-bolt11-preview" style="display:none"></div>
           <button id="btn-copy-invoice" style="background:var(--dim);border:1px solid var(--mid);color:var(--electric);font-family:var(--font-mono);font-size:.6rem;letter-spacing:.1em;padding:.5rem 1.2rem;border-radius:8px;cursor:pointer;text-transform:uppercase;transition:all .2s">Copiar Invoice</button>
+          <div style="height:1rem"></div>
         </div>
+        <div style="height:5rem;flex-shrink:0"></div>
       </div>
     </div>
   </div>
@@ -949,15 +1069,18 @@ function getDashboardHTML() {
         <input class="field-input" type="text" id="send-dest" placeholder="nombre@dominio.com o lnbc1..." style="margin-bottom:0;flex:1"/>
         <button class="btn-paste" id="btn-paste-dest">📋 Pegar</button>
       </div>
-      <div class="field-label" style="margin-top:1rem">Monto</div>
-      <div style="display:flex;gap:0;margin-bottom:.8rem">
-        <button class="inv-cur-btn active" id="send-cur-sats">SATS</button>
-        <button class="inv-cur-btn" id="send-cur-usd">USD</button>
-        <button class="inv-cur-btn" id="send-cur-ars">ARS</button>
-      </div>
-      <div style="position:relative;margin-bottom:.3rem">
-        <input class="field-input" type="text" id="send-amount" placeholder="0" inputmode="decimal" style="padding-right:3.5rem;font-family:var(--font-display);font-size:1.6rem;margin-bottom:0"/>
-        <span id="send-cur-label" style="position:absolute;right:1rem;top:50%;transform:translateY(-50%);font-family:var(--font-mono);font-size:.65rem;color:var(--muted);pointer-events:none">SATS</span>
+      <div id="send-invoice-info" style="display:none;justify-content:space-between;align-items:center;padding:.6rem .8rem;margin-top:.8rem;margin-bottom:.8rem;background:rgba(0,255,135,.06);border:1px solid rgba(0,255,135,.2);border-radius:10px;font-family:var(--font-mono);font-size:.6rem;letter-spacing:.05em"></div>
+      <div id="send-amount-section" style="transition:opacity .2s">
+        <div class="field-label" style="margin-top:1rem">Monto</div>
+        <div style="display:flex;gap:0;margin-bottom:.8rem">
+          <button class="inv-cur-btn active" id="send-cur-sats">SATS</button>
+          <button class="inv-cur-btn" id="send-cur-usd">USD</button>
+          <button class="inv-cur-btn" id="send-cur-ars">ARS</button>
+        </div>
+        <div style="position:relative;margin-bottom:.3rem">
+          <input class="field-input" type="text" id="send-amount" placeholder="0" inputmode="decimal" style="padding-right:3.5rem;font-family:var(--font-display);font-size:1.6rem;margin-bottom:0"/>
+          <span id="send-cur-label" style="position:absolute;right:1rem;top:50%;transform:translateY(-50%);font-family:var(--font-mono);font-size:.65rem;color:var(--muted);pointer-events:none">SATS</span>
+        </div>
       </div>
       <div id="send-conversion" style="font-family:var(--font-mono);font-size:.62rem;color:var(--muted);margin-bottom:1rem;min-height:1.2rem;padding:.4rem .2rem"></div>
       <div class="send-preview" id="send-preview">
