@@ -206,8 +206,13 @@ function handleExistingWallet() {
 
   connectBody.innerHTML = `
     <p class="screen-label">Conectar wallet</p>
-    <h2 class="screen-title" style="font-size:2.5rem">Pegá tu<br>NWC URL</h2>
-    <p class="screen-desc">Copiá tu Nostr Wallet Connect URL desde Alby Hub, Zeus u otra wallet compatible.</p>
+    <h2 class="screen-title" style="font-size:2.5rem">Conectá<br>tu wallet</h2>
+    <p class="screen-desc">Ingresá tu nombre y tu NWC URL para recibir tu Lightning Address.</p>
+    <div class="field-label">Tu nombre</div>
+    <input class="field-input" type="text" id="nwc-name-input" placeholder="Ej: Juan" autocomplete="off" style="margin-bottom:.3rem"/>
+    <div id="nwc-name-preview" style="text-align:center;margin-bottom:1rem;">
+      <div style="font-family:var(--font-address);font-size:.85rem;color:var(--muted);font-weight:300;letter-spacing:.03em">nombre@${window.location.host}</div>
+    </div>
     <div class="field-label">NWC Connection String</div>
     <input class="field-input" type="text" id="nwc-input" placeholder="nostr+walletconnect://..." style="font-size:.75rem;font-family:var(--font-mono)"/>
     <button class="btn btn-electric" id="btn-connect-nwc">Conectar ⚡</button>
@@ -215,15 +220,39 @@ function handleExistingWallet() {
     <button class="btn btn-dim" id="btn-back-connect">← Volver</button>
   `;
 
+  // Live preview of Lightning Address
+  on("nwc-name-input", "input", () => {
+    const input = document.getElementById("nwc-name-input");
+    const preview = document.getElementById("nwc-name-preview");
+    if (!input || !preview) return;
+    const val = input.value.trim();
+    const clean = val
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]/g, "")
+      .slice(0, 20);
+    const addr = clean || "nombre";
+    preview.innerHTML = `<div style="font-family:var(--font-address);font-size:.85rem;color:${clean ? "var(--electric)" : "var(--muted)"};font-weight:300;letter-spacing:.03em">${addr}@${window.location.host}</div>`;
+  });
+
   on("btn-connect-nwc", "click", async () => {
-    const input = document.getElementById("nwc-input");
-    const url = input?.value?.trim();
+    const nameInput = document.getElementById("nwc-name-input");
+    const nwcInput = document.getElementById("nwc-input");
+    const name = nameInput?.value?.trim();
+    const url = nwcInput?.value?.trim();
+
+    if (!name || name.length < 2) {
+      ctx.showToast("Ingresá tu nombre (mínimo 2 letras)");
+      return;
+    }
     if (!url || !url.startsWith("nostr+walletconnect://")) {
       ctx.showToast("URL inválida — debe empezar con nostr+walletconnect://");
       return;
     }
 
-    ctx.setState({ nwcUrl: url });
+    const addr = generateLocalAddress(name);
+    ctx.setState({ nwcUrl: url, displayName: name, lightningAddress: addr });
     ctx.goTo("screen-creating");
 
     await runCreationAnimation(async (step) => {
