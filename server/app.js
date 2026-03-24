@@ -24,7 +24,7 @@ let dbPromise = null;
 app.use("*", logger());
 app.use("/api/*", cors());
 
-// ── Health Check (no DB needed — for diagnosing deploy issues) ──
+// ── Health Check (no DB needed) ──
 app.get("/api/health", (c) => {
   return c.json({
     status: "ok",
@@ -34,27 +34,28 @@ app.get("/api/health", (c) => {
   });
 });
 
-// Pass db to all routes via context (async init)
-app.use("/api/*", async (c, next) => {
+// Routes that DON'T need DB (prices fetches live, no DB required)
+app.route("/api/prices", priceRoutes);
+
+// DB middleware — only for routes that need it
+const dbMiddleware = async (c, next) => {
   if (!dbPromise) dbPromise = initDB();
   const db = await dbPromise;
   c.set("db", db);
   await next();
-});
+};
 
-app.use("/.well-known/*", async (c, next) => {
-  if (!dbPromise) dbPromise = initDB();
-  const db = await dbPromise;
-  c.set("db", db);
-  await next();
-});
+app.use("/api/auth/*", dbMiddleware);
+app.use("/api/events/*", dbMiddleware);
+app.use("/api/onboard/*", dbMiddleware);
+app.use("/api/attendees/*", dbMiddleware);
+app.use("/.well-known/*", dbMiddleware);
 
-// ── Routes ──
+// ── Routes (DB-dependent) ──
 app.route("/api/auth", authRoutes);
 app.route("/api/events", eventRoutes);
 app.route("/api/onboard", onboardRoutes);
 app.route("/api/attendees", attendeeRoutes);
-app.route("/api/prices", priceRoutes);
 app.route("/.well-known/lnurlp", lnurlpRoutes);
 
 export default app;
