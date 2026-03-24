@@ -2,11 +2,16 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "satsparty-dev",
+      "name": "dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 5173
+    },
+    {
+      "name": "backend",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["node_modules/vite/bin/vite.js", "--host"],
-      "port": 5173,
-      "cwd": "lightning-starter"
+      "runtimeArgs": ["server/index.js"],
+      "port": 3001
     }
   ]
 }
