@@ -27,7 +27,7 @@ async function initDashboard() {
 
   // Generar QR de Lightning Address
   const state = ctx.getState();
-  const addr = state.lightningAddress || "wallet@satsparty.app";
+  const addr = state.lightningAddress || `wallet@${window.location.host}`;
   const qrContainer = document.getElementById("address-qr-container");
   if (qrContainer) {
     qrContainer.innerHTML = ctx.generateQRSvg(addr, 150);
@@ -59,7 +59,7 @@ function setupDashboardEvents() {
 
   // Dashboard actions
   onClick("dash-address-pill", () => {
-    copyToClipboard(ctx.getState().lightningAddress || "wallet@satsparty.app");
+    copyToClipboard(ctx.getState().lightningAddress || `wallet@${window.location.host}`);
   });
   onClick("dash-balance-row", cycleCurrency);
 
@@ -75,7 +75,7 @@ function setupDashboardEvents() {
   onClick("tab-address-btn", () => switchTab("address"));
   onClick("tab-invoice-btn", () => switchTab("invoice"));
   onClick("btn-copy-address", () => {
-    copyToClipboard(ctx.getState().lightningAddress || "wallet@satsparty.app");
+    copyToClipboard(ctx.getState().lightningAddress || `wallet@${window.location.host}`);
   });
   onClick("btn-generate-invoice", generateInvoice);
 
@@ -126,7 +126,7 @@ function setupDashboardEvents() {
   onClick("pesos-prev-3", () => wizardStep("pesos", 2, 4));
   onClick("pesos-prev-4", () => wizardStep("pesos", 3, 4));
   onClick("btn-copy-addr-pesos", () => {
-    copyToClipboard(ctx.getState().lightningAddress || "wallet@satsparty.app");
+    copyToClipboard(ctx.getState().lightningAddress || `wallet@${window.location.host}`);
   });
   onClick("btn-invoice-pesos", () => {
     navTo("s-receive");
@@ -954,7 +954,7 @@ function resetScanUI() {
 
 function getDashboardHTML() {
   const state = ctx.getState();
-  const addr = state.lightningAddress || "wallet@satsparty.app";
+  const addr = state.lightningAddress || `wallet@${window.location.host}`;
   const balance = state.balance || 0;
   const nwcUrl = state.nwcUrl || "nostr+walletconnect://...";
 

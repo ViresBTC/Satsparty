@@ -20,6 +20,10 @@ export default defineConfig({
         target: 'http://localhost:3001',
         changeOrigin: true,
       },
+      '/.well-known/lnurlp': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
     },
   },
   // SPA fallback: /onboard/:code → index.html

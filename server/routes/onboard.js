@@ -95,7 +95,8 @@ onboard.post("/:code/claim", async (c) => {
   const token = nanoid(21);
 
   // Generate lightning address from name
-  const lightningAddress = generateLightningAddress(displayName.trim());
+  const host = c.req.header("host") || "localhost";
+  const lightningAddress = generateLightningAddress(displayName.trim(), host);
 
   // Welcome sats
   const welcomeSats = event.welcome_sats || 100;
@@ -179,10 +180,9 @@ onboard.post("/:code/claim", async (c) => {
 
 /**
  * Generate a lightning address from a display name
- * "Juan Pérez" → "juanperez@satsparty.app"
- * "María José" → "mariajose@satsparty.app"
+ * Domain is auto-detected from the request host
  */
-function generateLightningAddress(name) {
+function generateLightningAddress(name, host) {
   const sanitized = name
     .toLowerCase()
     .normalize("NFD")
@@ -192,7 +192,7 @@ function generateLightningAddress(name) {
 
   // Add random suffix to avoid collisions
   const suffix = nanoid(4).toLowerCase();
-  return `${sanitized || "user"}${suffix}@satsparty.app`;
+  return `${sanitized || "user"}${suffix}@${host}`;
 }
 
 export default onboard;

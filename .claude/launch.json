@@ -2,16 +2,10 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "dev",
+      "name": "satsparty-dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": ["run", "dev:all"],
       "port": 5173
-    },
-    {
-      "name": "backend",
-      "runtimeExecutable": "node",
-      "runtimeArgs": ["server/index.js"],
-      "port": 3001
     }
   ]
 }

@@ -61,10 +61,10 @@ function setupOnboardingEvents() {
         .replace(/[\u0300-\u036f]/g, "")
         .replace(/[^a-z0-9]/g, "")
         .slice(0, 20);
-      preview.textContent = `${clean || "user"}@satsparty.app`;
+      preview.textContent = `${clean || "user"}@${window.location.host}`;
       preview.style.color = "var(--electric)";
     } else {
-      preview.textContent = "nombre@satsparty.app";
+      preview.textContent = `nombre@${window.location.host}`;
       preview.style.color = "var(--muted)";
     }
   });
@@ -191,7 +191,7 @@ function generateLocalAddress(name) {
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]/g, "")
     .slice(0, 20);
-  return `${clean || "user"}@satsparty.app`;
+  return `${clean || "user"}@${window.location.host}`;
 }
 
 async function handleNewWallet() {
@@ -260,7 +260,7 @@ function updateCreatedScreen(balance) {
 
   if (balEl) balEl.textContent = balance;
   if (balDisplayEl) balDisplayEl.textContent = balance;
-  if (addrEl) addrEl.textContent = state.lightningAddress || "wallet@satsparty.app";
+  if (addrEl) addrEl.textContent = state.lightningAddress || `wallet@${window.location.host}`;
   if (balCardEl) balCardEl.textContent = balance + " sats";
 }
 
@@ -338,7 +338,7 @@ const missionContent = {
     desc: "Esta es tu dirección Bitcoin. Funciona como un email — cualquier persona en el mundo puede mandarte sats escribiendo esta dirección.",
     getContent: () => {
       const state = ctx.getState();
-      const addr = state.lightningAddress || "wallet@satsparty.app";
+      const addr = state.lightningAddress || `wallet@${window.location.host}`;
       return `
         <div class="info-card" style="margin-bottom:1rem;">
           <div class="info-card-icon">📧</div>
@@ -402,6 +402,18 @@ function activateMission(n) {
       btn.addEventListener("click", () => completeMission(n));
     }
   }, 50);
+
+  // Mission 3 (Precio en vivo): auto-update when prices change
+  if (n === 3 && ctx.onStateChange) {
+    if (activateMission._unsub) activateMission._unsub();
+    activateMission._unsub = ctx.onStateChange((st) => {
+      if (contentEl && amp.classList.contains("visible")) {
+        contentEl.innerHTML = data.getContent();
+        const btn = document.getElementById("btn-mission-3");
+        if (btn) btn.addEventListener("click", () => completeMission(3));
+      }
+    });
+  }
 }
 
 function completeMission(n) {
@@ -570,7 +582,7 @@ function getOnboardingHTML() {
       </div>
       <div id="name-preview" style="text-align:center;margin-bottom:1.5rem;">
         <div style="font-family:var(--font-mono);font-size:.55rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:.3rem">Tu dirección será</div>
-        <div style="font-family:var(--font-address);font-size:1rem;color:var(--electric);font-weight:300;letter-spacing:.03em" id="name-preview-addr">nombre@satsparty.app</div>
+        <div style="font-family:var(--font-address);font-size:1rem;color:var(--electric);font-weight:300;letter-spacing:.03em" id="name-preview-addr">nombre@${window.location.host}</div>
       </div>
       <div class="login-error" id="name-error"></div>
     </div>
@@ -645,7 +657,7 @@ function getOnboardingHTML() {
           <div class="info-card-icon">📧</div>
           <div class="info-card-content">
             <div class="info-card-label">Tu Lightning Address</div>
-            <div class="info-card-value electric ln-addr" id="created-address">wallet@satsparty.app</div>
+            <div class="info-card-value electric ln-addr" id="created-address">wallet@${window.location.host}</div>
           </div>
         </div>
         <div class="info-card">
@@ -763,7 +775,7 @@ function getOnboardingHTML() {
           <div class="ticket-row">
             <div>
               <div class="ticket-field-label">Tu Lightning Address</div>
-              <div class="ticket-field-value electric ln-addr" id="ticket-address">wallet@satsparty.app</div>
+              <div class="ticket-field-value electric ln-addr" id="ticket-address">wallet@${window.location.host}</div>
             </div>
           </div>
           <div class="ticket-row">

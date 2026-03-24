@@ -37,6 +37,7 @@ const defaultState = {
 };
 
 let state = { ...defaultState };
+const listeners = new Set();
 
 /**
  * Cargar estado desde localStorage
@@ -79,6 +80,17 @@ export function getState() {
 export function setState(updates) {
   Object.assign(state, updates);
   saveState();
+  listeners.forEach((fn) => fn(state));
+}
+
+/**
+ * Subscribirse a cambios de estado
+ * @param {(state: object) => void} fn
+ * @returns {() => void} unsubscribe
+ */
+export function onStateChange(fn) {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
 }
 
 /**

@@ -197,6 +197,19 @@ function getAdminHTML() {
               </div>
             </div>
 
+            <!-- Lightning Address -->
+            <div class="admin-card">
+              <div class="admin-card-title">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                Lightning Address
+              </div>
+              <div class="admin-card-body">
+                <div class="field-label">Dominio</div>
+                <input class="field-input" id="admin-ln-domain" autocomplete="off"/>
+                <div class="admin-field-hint">Auto-detectado del dominio donde corre la app. Los asistentes recibir\u00e1n direcciones como <span id="ln-address-preview" style="color:var(--electric)">juan@dominio</span></div>
+              </div>
+            </div>
+
             <!-- Alby Hub -->
             <div class="admin-card">
               <div class="admin-card-title">
@@ -325,6 +338,20 @@ function setupEvents() {
   onClick("btn-reopen-event", handleReopenEvent);
   onClick("btn-test-alby", handleTestAlby);
   onClick("btn-copy-link", handleCopyLink);
+
+  // Auto-detect domain and live preview
+  const lnDomainEl = document.getElementById("admin-ln-domain");
+  if (lnDomainEl && !lnDomainEl.value) {
+    lnDomainEl.value = window.location.host;
+  }
+  const updateLnPreview = () => {
+    const preview = document.getElementById("ln-address-preview");
+    if (!preview) return;
+    const domain = lnDomainEl?.value?.trim() || window.location.host;
+    preview.textContent = `juan@${domain}`;
+  };
+  if (lnDomainEl) lnDomainEl.addEventListener("input", updateLnPreview);
+  updateLnPreview();
 }
 
 // ══════════════════════════════════════════════════
@@ -513,6 +540,7 @@ async function showEventForm(eventId) {
   const albyUrlInput = document.getElementById("admin-alby-url");
   const albyTokenInput = document.getElementById("admin-alby-token");
   const albyHint = document.getElementById("admin-alby-hint");
+  const lnDomainInput = document.getElementById("admin-ln-domain");
   const statsCard = document.getElementById("event-stats-card");
   const qrCard = document.getElementById("event-qr-card");
   const deleteBtn = document.getElementById("btn-delete-event");
@@ -532,6 +560,7 @@ async function showEventForm(eventId) {
     if (albyUrlInput) albyUrlInput.value = "";
     if (albyTokenInput) albyTokenInput.value = "";
     if (albyHint) albyHint.style.display = "none";
+    if (lnDomainInput) lnDomainInput.value = window.location.host;
     if (statsCard) statsCard.style.display = "none";
     if (qrCard) qrCard.style.display = "none";
     if (deleteBtn) deleteBtn.style.display = "none";
@@ -575,7 +604,7 @@ async function showEventForm(eventId) {
     if (satsInput) satsInput.value = evt.welcomeSats || 100;
     if (maxInput) maxInput.value = evt.maxAttendees || 0;
 
-    // Alby Hub fields \u2014 credentials not returned by backend (security)
+    // Alby Hub fields — credentials not returned by backend (security)
     if (albyUrlInput) albyUrlInput.value = "";
     if (albyTokenInput) albyTokenInput.value = "";
     if (albyHint) {
@@ -586,6 +615,9 @@ async function showEventForm(eventId) {
         albyHint.style.display = "none";
       }
     }
+
+    // Lightning Address fields
+    if (lnDomainInput) lnDomainInput.value = evt.lnDomain || window.location.host;
 
     // Mostrar/ocultar banner de cerrado
     if (closedBanner) closedBanner.style.display = isClosed ? "flex" : "none";
@@ -688,6 +720,7 @@ async function handleSaveEvent() {
   const maxAtt = parseInt(document.getElementById("admin-max-attendees")?.value) || 0;
   const albyUrl = document.getElementById("admin-alby-url")?.value?.trim();
   const albyToken = document.getElementById("admin-alby-token")?.value?.trim();
+  const lnDomain = document.getElementById("admin-ln-domain")?.value?.trim();
 
   if (!name) {
     ctx.showToast("Ponele un nombre al evento");
@@ -698,7 +731,7 @@ async function handleSaveEvent() {
     try {
       if (activeEventId) {
         // Editar existente
-        const updates = { name, date, welcomeSats: sats, maxAttendees: maxAtt };
+        const updates = { name, date, welcomeSats: sats, maxAttendees: maxAtt, lnDomain };
         if (albyUrl) updates.albyHubUrl = albyUrl;
         if (albyToken) updates.albyAuthToken = albyToken;
         await api.updateEvent(activeEventId, updates);
@@ -716,6 +749,7 @@ async function handleSaveEvent() {
           maxAttendees: maxAtt,
           albyHubUrl: albyUrl,
           albyAuthToken: albyToken,
+          lnDomain,
         });
         activeEventId = data.event.id;
         ctx.showToast("Evento creado");
@@ -732,11 +766,12 @@ async function handleSaveEvent() {
         date,
         welcomeSats: sats,
         maxAttendees: maxAtt,
+        lnDomain,
       });
       setEventInfo(activeEventId, { name, date, welcomeSats: sats });
       ctx.showToast("Evento actualizado (local)");
     } else {
-      const evt = createLocalEvent(pubkey, { name, date, welcomeSats: sats, maxAttendees: maxAtt });
+      const evt = createLocalEvent(pubkey, { name, date, welcomeSats: sats, maxAttendees: maxAtt, lnDomain });
       setEventInfo(evt.id, { name, date, welcomeSats: sats });
       activeEventId = evt.id;
       ctx.showToast("Evento creado (local)");
@@ -876,6 +911,7 @@ function apiEventToLocal(apiEvt) {
     maxAttendees: apiEvt.maxAttendees,
     closed: apiEvt.status === "closed",
     hasAlbyConfig: apiEvt.hasAlbyConfig,
+    lnDomain: apiEvt.lnDomain || "",
     attendees: apiEvt.attendeeCount || 0,
     satsDistributed: 0,
     createdAt: apiEvt.createdAt,
