@@ -57,6 +57,8 @@ async function _initDBInternal() {
  *
  * Key difference: all methods are now ASYNC (return promises).
  * Routes must use: await db.prepare("...").get(...)
+ *
+ * Uses sql.query() for parameterized queries (not tagged templates).
  */
 function createWrapper(sql) {
   const wrapper = {
@@ -69,7 +71,7 @@ function createWrapper(sql) {
          */
         async get(...params) {
           try {
-            const rows = await sql(pgQuery, params);
+            const rows = await sql.query(pgQuery, params);
             return rows[0] || undefined;
           } catch (err) {
             console.error("DB get error:", err.message, pgQuery);
@@ -82,7 +84,7 @@ function createWrapper(sql) {
          */
         async all(...params) {
           try {
-            return await sql(pgQuery, params);
+            return await sql.query(pgQuery, params);
           } catch (err) {
             console.error("DB all error:", err.message, pgQuery);
             return [];
@@ -95,7 +97,7 @@ function createWrapper(sql) {
          */
         async run(...params) {
           try {
-            const result = await sql(pgQuery, params);
+            const result = await sql.query(pgQuery, params);
             // For INSERT with RETURNING, the id is in the first row
             const lastInsertRowid = result[0]?.id || 0;
             const changes = result.length || 0;
@@ -110,7 +112,7 @@ function createWrapper(sql) {
 
     async exec(query) {
       try {
-        await sql(query);
+        await sql.query(query);
       } catch (err) {
         console.error("DB exec error:", err.message);
       }
@@ -126,18 +128,20 @@ function createWrapper(sql) {
 
 /**
  * Database migrations (PostgreSQL syntax)
+ * Uses tagged template for schema DDL (no params needed)
  */
 async function migrate(sql) {
-  await sql(`
-    -- Admins (single admin for now)
+  // Create tables one by one (Neon tagged templates don't support multi-statement)
+  await sql`
     CREATE TABLE IF NOT EXISTS admins (
       id SERIAL PRIMARY KEY,
       username TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
       created_at TIMESTAMP DEFAULT NOW()
-    );
+    )
+  `;
 
-    -- Events
+  await sql`
     CREATE TABLE IF NOT EXISTS events (
       id SERIAL PRIMARY KEY,
       name TEXT NOT NULL,
@@ -149,9 +153,10 @@ async function migrate(sql) {
       alby_auth_token TEXT NOT NULL,
       status TEXT DEFAULT 'active',
       created_at TIMESTAMP DEFAULT NOW()
-    );
+    )
+  `;
 
-    -- Attendees
+  await sql`
     CREATE TABLE IF NOT EXISTS attendees (
       id SERIAL PRIMARY KEY,
       event_id INTEGER NOT NULL REFERENCES events(id),
@@ -168,19 +173,20 @@ async function migrate(sql) {
       ip_hash TEXT,
       created_at TIMESTAMP DEFAULT NOW(),
       last_seen_at TIMESTAMP
-    );
+    )
+  `;
 
-    CREATE INDEX IF NOT EXISTS idx_attendees_event ON attendees(event_id);
-    CREATE INDEX IF NOT EXISTS idx_attendees_token ON attendees(token);
+  await sql`CREATE INDEX IF NOT EXISTS idx_attendees_event ON attendees(event_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_attendees_token ON attendees(token)`;
 
-    -- Price cache
+  await sql`
     CREATE TABLE IF NOT EXISTS price_cache (
       id INTEGER PRIMARY KEY DEFAULT 1,
       btc_usd REAL NOT NULL DEFAULT 84210,
       usd_ars REAL NOT NULL DEFAULT 1285,
       updated_at TIMESTAMP DEFAULT NOW()
-    );
-  `);
+    )
+  `;
 
   // Seed price cache if empty
   const existing = await sql`SELECT id FROM price_cache WHERE id = 1`;
