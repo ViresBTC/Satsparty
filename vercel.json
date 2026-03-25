@@ -17,12 +17,24 @@
       "destination": "/api/prices"
     },
     {
-      "source": "/api/(.*)",
-      "destination": "/api/[...route]"
+      "source": "/api/db-test",
+      "destination": "/api/db-test"
+    },
+    {
+      "source": "/api/auth/(.*)",
+      "destination": "/api/auth/$1"
+    },
+    {
+      "source": "/api/events/(.*)",
+      "destination": "/api/events/$1"
+    },
+    {
+      "source": "/api/onboard/(.*)",
+      "destination": "/api/onboard/$1"
     },
     {
       "source": "/.well-known/lnurlp/(.*)",
-      "destination": "/api/[...route]"
+      "destination": "/api/lnurlp/$1"
     },
     {
       "source": "/onboard/:code",
