@@ -4,32 +4,33 @@ export default async function handler(req, res) {
     let t;
 
     t = Date.now();
-    await import("hono");
-    steps.push(`hono: ${Date.now() - t}ms`);
+    await import("../server/routes/auth.js");
+    steps.push(`auth routes: ${Date.now() - t}ms`);
 
     t = Date.now();
-    await import("hono/vercel");
-    steps.push(`hono/vercel: ${Date.now() - t}ms`);
+    await import("../server/db.js");
+    steps.push(`db.js: ${Date.now() - t}ms`);
 
     t = Date.now();
-    await import("jsonwebtoken");
-    steps.push(`jsonwebtoken: ${Date.now() - t}ms`);
+    const { initDB } = await import("../server/db.js");
+    const db = await initDB();
+    steps.push(`initDB: ${Date.now() - t}ms`);
 
     t = Date.now();
-    await import("nanoid");
-    steps.push(`nanoid: ${Date.now() - t}ms`);
+    const result = await db.prepare("SELECT 1 as test").get();
+    steps.push(`query: ${Date.now() - t}ms, result: ${JSON.stringify(result)}`);
 
     t = Date.now();
-    await import("nostr-tools/pure");
-    steps.push(`nostr-tools/pure: ${Date.now() - t}ms`);
+    await import("../server/routes/events.js");
+    steps.push(`events routes: ${Date.now() - t}ms`);
 
     t = Date.now();
-    await import("@neondatabase/serverless");
-    steps.push(`neon: ${Date.now() - t}ms`);
+    await import("../server/app.js");
+    steps.push(`full app.js: ${Date.now() - t}ms`);
 
     res.status(200).json({ ok: true, steps });
   } catch (err) {
     steps.push(`ERROR: ${err.message}`);
-    res.status(500).json({ ok: false, steps, error: err.message });
+    res.status(500).json({ ok: false, steps, error: err.message, stack: err.stack?.split("\n").slice(0,5) });
   }
 }
