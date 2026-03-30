@@ -17,7 +17,7 @@ import { renderAdmin } from "./admin.js";
 let currentScreen = null;
 
 // ── INIT ──
-function init() {
+async function init() {
   try {
     console.log("[SatsParty] Iniciando...");
     loadState();
@@ -28,18 +28,38 @@ function init() {
     const urlParams = new URLSearchParams(window.location.search);
     const eventParam = urlParams.get("event");
 
-    // Si viene con ?event=, cargar info del evento al state
+    // Si viene con ?event=, cargar info del evento desde el backend
     if (eventParam) {
-      const eventInfo = getEventInfo(eventParam);
-      if (eventInfo) {
-        setState({
-          eventCode: eventParam,
-          eventName: eventInfo.name,
-          eventDate: eventInfo.date,
-          welcomeSats: eventInfo.welcomeSats,
-        });
-      } else {
-        setState({ eventCode: eventParam });
+      try {
+        const data = await api.fetchEventByCode(eventParam);
+        if (data.event) {
+          setState({
+            eventCode: eventParam,
+            eventName: data.event.name,
+            eventDate: data.event.date,
+            welcomeSats: data.event.welcomeSats,
+          });
+        }
+      } catch (err) {
+        // Backend returned error — check if event is closed or not found
+        if (err.message?.includes("finalizó") || err.message?.includes("closed")) {
+          setState({ eventCode: eventParam });
+          showEventClosed(err.message);
+          updatePrices();
+          return;
+        }
+        // Fallback: try localStorage (offline/local dev)
+        const eventInfo = getEventInfo(eventParam);
+        if (eventInfo) {
+          setState({
+            eventCode: eventParam,
+            eventName: eventInfo.name,
+            eventDate: eventInfo.date,
+            welcomeSats: eventInfo.welcomeSats,
+          });
+        } else {
+          setState({ eventCode: eventParam });
+        }
       }
     }
 
@@ -47,9 +67,6 @@ function init() {
     const isAdmin = window.location.hash === "#admin" || window.location.pathname === "/admin";
     if (isAdmin) {
       startAdmin();
-    } else if (eventParam && isEventClosed(eventParam)) {
-      // Evento cerrado — bloquear acceso
-      showEventClosed();
     } else if (state.onboardingComplete && state.nwcUrl) {
       startDashboard();
     } else {

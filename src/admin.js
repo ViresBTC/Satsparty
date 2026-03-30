@@ -781,23 +781,28 @@ async function handleSaveEvent() {
 }
 
 async function handleDeleteEvent() {
-  if (!activeEventId) return;
+  if (!activeEventId) {
+    console.warn("[Admin] No activeEventId for delete");
+    return;
+  }
 
-  if (!confirm("\u00bfEliminar este evento? Esta acci\u00f3n no se puede deshacer.")) return;
+  if (!confirm("¿Eliminar este evento? Esta acción no se puede deshacer.")) return;
 
   if (_backendOk) {
     try {
+      console.log("[Admin] Deleting event:", activeEventId);
       await api.deleteEvent(activeEventId);
-      ctx.showToast("Evento archivado");
+      ctx.showToast("Evento eliminado");
     } catch (err) {
+      console.error("[Admin] Delete error:", err);
       ctx.showToast("Error: " + err.message);
       return;
     }
-  } else {
-    const state = ctx.getState();
-    deleteLocalEvent(state.adminPubkey, activeEventId);
-    ctx.showToast("Evento eliminado");
   }
+
+  // Also delete from local storage
+  const state = ctx.getState();
+  deleteLocalEvent(state.adminPubkey, activeEventId);
 
   activeEventId = null;
   showEventsList();

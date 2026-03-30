@@ -94,6 +94,12 @@ export async function getEventAttendees(id) {
   return request("GET", `/events/${id}/attendees`);
 }
 
+// ── ONBOARD ──
+
+export async function fetchEventByCode(code) {
+  return request("GET", `/onboard/${code}`);
+}
+
 // ── ALBY ──
 
 export async function testAlbyConnection(albyHubUrl, albyAuthToken) {

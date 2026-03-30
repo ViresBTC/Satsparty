@@ -35,7 +35,7 @@ onboard.get("/:code", async (c) => {
     .prepare("SELECT COUNT(*) as cnt FROM attendees WHERE event_id = ?")
     .get(event.id);
 
-  if (count.cnt >= event.max_attendees) {
+  if (event.max_attendees > 0 && count.cnt >= event.max_attendees) {
     return c.json(
       {
         error: "Evento lleno. Se alcanzó el máximo de asistentes.",
@@ -87,7 +87,7 @@ onboard.post("/:code/claim", async (c) => {
     .prepare("SELECT COUNT(*) as cnt FROM attendees WHERE event_id = ?")
     .get(event.id);
 
-  if (count.cnt >= event.max_attendees) {
+  if (event.max_attendees > 0 && count.cnt >= event.max_attendees) {
     return c.json({ error: "Evento lleno." }, 403);
   }
 
