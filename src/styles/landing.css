@@ -5,23 +5,27 @@
 /* Override app container for landing — full width, no phone frame */
 .app.app--landing {
   max-width: 100%;
-  height: auto;
+  height: auto !important;
   min-height: 100vh;
-  border: none;
-  border-radius: 0;
-  box-shadow: none;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
   background: var(--bg, #0a0a0a);
-  overflow-y: auto;
+  overflow-y: auto !important;
   overflow-x: hidden;
 }
 
 @media (min-width: 431px) {
+  body:has(.app--landing) {
+    display: block;
+    overflow-y: auto;
+  }
   .app.app--landing {
-    height: auto;
+    height: auto !important;
     min-height: 100vh;
-    border: none;
-    border-radius: 0;
-    box-shadow: none;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
   }
 }
 
