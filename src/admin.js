@@ -671,9 +671,8 @@ async function showEventForm(eventId) {
 }
 
 function getEventUrl(evt) {
-  const base = window.location.origin + window.location.pathname.replace(/\/$/, "");
   const identifier = evt.code || evt.id;
-  return base + "?event=" + identifier;
+  return window.location.origin + "?event=" + identifier;
 }
 
 function renderAttendeesList(evt) {
