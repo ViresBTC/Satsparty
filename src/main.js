@@ -132,6 +132,7 @@ async function updatePrices() {
 function startOnboarding() {
   const app = document.getElementById("app");
   app.innerHTML = "";
+  app.classList.remove("app--landing");
   renderOnboarding(app, {
     goTo,
     showToast,
@@ -150,12 +151,14 @@ function startOnboarding() {
 function startLanding() {
   const app = document.getElementById("app");
   app.innerHTML = "";
+  app.classList.add("app--landing");
   renderLanding(app, { goTo, showToast, getState, setState });
 }
 
 function startAdmin() {
   const app = document.getElementById("app");
   app.innerHTML = "";
+  app.classList.remove("app--landing");
   app.classList.add("app--admin");
   renderAdmin(app, {
     goTo,
@@ -173,6 +176,7 @@ function startAdmin() {
 function startDashboard() {
   const app = document.getElementById("app");
   app.innerHTML = "";
+  app.classList.remove("app--landing");
   renderDashboard(app, {
     goTo,
     showToast,

@@ -2,6 +2,29 @@
    SatsParty — Landing Page Styles
    ═══════════════════════════════════════ */
 
+/* Override app container for landing — full width, no phone frame */
+.app.app--landing {
+  max-width: 100%;
+  height: auto;
+  min-height: 100vh;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  background: var(--bg, #0a0a0a);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+@media (min-width: 431px) {
+  .app.app--landing {
+    height: auto;
+    min-height: 100vh;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+  }
+}
+
 .landing {
   min-height: 100vh;
   background: var(--bg, #0a0a0a);
