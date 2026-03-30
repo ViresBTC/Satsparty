@@ -13,6 +13,7 @@ let currentView = "s-dashboard";
 let currencyIdx = 0;
 let sendCurIdx = 0; // 0=SATS, 1=USD, 2=ARS
 let qrScanner = null;
+let balancePollingInterval = null;
 
 export function renderDashboard(app, context) {
   ctx = context;
@@ -43,6 +44,94 @@ async function initDashboard() {
   setupDashboardEvents();
   // Activar primera misión en onboarding si aplica
   activateMission(1);
+
+  // Start background balance polling (detects incoming Lightning Address payments)
+  startBalancePolling();
+}
+
+function startBalancePolling() {
+  // Clear any existing interval
+  if (balancePollingInterval) clearInterval(balancePollingInterval);
+
+  balancePollingInterval = setInterval(async () => {
+    try {
+      if (!ctx.nwcService?.isConnected()) return;
+      const oldBalance = ctx.getState().balance || 0;
+      const newBalance = await ctx.nwcService.getBalance();
+
+      if (newBalance > oldBalance) {
+        const received = newBalance - oldBalance;
+        ctx.setState({ balance: newBalance });
+        updateBalanceDisplay();
+
+        // Show notification
+        showIncomingPayment(received, newBalance);
+        console.log(`[Dashboard] Incoming payment detected: +${received} sats`);
+      }
+    } catch (_) {
+      // Silently ignore polling errors
+    }
+  }, 8000); // Check every 8 seconds
+}
+
+function showIncomingPayment(amountSats, newBalance) {
+  // Show toast
+  ctx.showToast(`+${amountSats.toLocaleString()} sats recibidos ⚡`);
+
+  // If we're on the main dashboard, show a banner notification
+  if (currentView === "s-dashboard") {
+    const banner = document.createElement("div");
+    banner.className = "incoming-payment-banner";
+    banner.innerHTML = `
+      <div class="incoming-icon">⚡</div>
+      <div class="incoming-text">
+        <strong>+${amountSats.toLocaleString()} sats</strong>
+        <span>Pago recibido via Lightning Address</span>
+      </div>
+    `;
+    banner.style.cssText = `
+      position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+      background: linear-gradient(135deg, rgba(30,30,30,0.95), rgba(20,20,20,0.95));
+      border: 1px solid var(--electric, #d4ff00); border-radius: 12px;
+      padding: 12px 20px; display: flex; align-items: center; gap: 12px;
+      z-index: 9999; animation: slideDown 0.4s ease-out;
+      box-shadow: 0 4px 20px rgba(212,255,0,0.2);
+      font-family: var(--font-mono, monospace); color: #fff;
+      max-width: 90vw;
+    `;
+
+    // Add animation keyframes if not already added
+    if (!document.getElementById("incoming-payment-style")) {
+      const style = document.createElement("style");
+      style.id = "incoming-payment-style";
+      style.textContent = `
+        @keyframes slideDown {
+          from { transform: translateX(-50%) translateY(-100%); opacity: 0; }
+          to { transform: translateX(-50%) translateY(0); opacity: 1; }
+        }
+        .incoming-icon { font-size: 1.5rem; }
+        .incoming-text { display: flex; flex-direction: column; gap: 2px; }
+        .incoming-text strong { color: var(--electric, #d4ff00); font-size: 1.1rem; }
+        .incoming-text span { font-size: 0.8rem; color: #aaa; }
+      `;
+      document.head.appendChild(style);
+    }
+
+    document.body.appendChild(banner);
+
+    // Launch effects
+    setTimeout(() => ctx.launchLightningBolt?.(), 200);
+    setTimeout(() => ctx.launchConfetti?.(), 500);
+
+    // Remove banner after 5 seconds
+    setTimeout(() => {
+      banner.style.animation = "slideDown 0.3s ease-in reverse forwards";
+      setTimeout(() => banner.remove(), 300);
+    }, 5000);
+  }
+
+  // Refresh history
+  refreshHistory();
 }
 
 function setupDashboardEvents() {
