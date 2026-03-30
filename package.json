@@ -24,6 +24,9 @@
   ],
   "author": "La Crypta",
   "license": "MIT",
+  "engines": {
+    "node": "20.x"
+  },
   "dependencies": {
     "@getalby/lightning-tools": "^5.0.0",
     "@getalby/sdk": "^3.0.0",
