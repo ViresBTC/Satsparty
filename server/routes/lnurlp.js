@@ -1,4 +1,10 @@
 import { Hono } from "hono";
+import WebSocket from "ws";
+
+// Polyfill WebSocket for serverless (NWC uses Nostr relays via WebSocket)
+if (typeof globalThis.WebSocket === "undefined") {
+  globalThis.WebSocket = WebSocket;
+}
 
 const lnurlp = new Hono();
 
