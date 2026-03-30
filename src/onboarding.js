@@ -5,6 +5,8 @@
  * la creación de wallet con NWC real.
  */
 
+import * as api from "./services/api.js";
+
 let ctx = {}; // contexto pasado desde main.js
 
 export function renderOnboarding(app, context) {
@@ -260,6 +262,14 @@ function handleExistingWallet() {
         try {
           const result = await ctx.onWalletCreated(url);
           updateCreatedScreen(result.balance);
+
+          // Register in backend so Lightning Address works via LNURL
+          try {
+            await api.registerAttendee(name, url, addr);
+            console.log("[Onboarding] Attendee registered in backend:", addr);
+          } catch (regErr) {
+            console.warn("[Onboarding] Backend register failed (LA may not work):", regErr.message);
+          }
         } catch (err) {
           ctx.showToast("Error: " + err.message);
           ctx.goTo("screen-connect");

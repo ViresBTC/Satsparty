@@ -179,6 +179,18 @@ async function migrate(sql) {
   await sql`CREATE INDEX IF NOT EXISTS idx_attendees_event ON attendees(event_id)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_attendees_token ON attendees(token)`;
 
+  // Migration: make event_id nullable for self-registered users
+  try {
+    await sql`ALTER TABLE attendees ALTER COLUMN event_id DROP NOT NULL`;
+  } catch (_) {
+    // Already nullable or doesn't support ALTER — ignore
+  }
+  try {
+    await sql`ALTER TABLE attendees DROP CONSTRAINT IF EXISTS attendees_event_id_fkey`;
+  } catch (_) {
+    // No constraint to drop — ignore
+  }
+
   await sql`
     CREATE TABLE IF NOT EXISTS price_cache (
       id INTEGER PRIMARY KEY DEFAULT 1,

@@ -100,6 +100,12 @@ export async function fetchEventByCode(code) {
   return request("GET", `/onboard/${code}`);
 }
 
+// ── ATTENDEES ──
+
+export async function registerAttendee(displayName, nwcUrl, lightningAddress) {
+  return request("POST", "/attendees/register", { displayName, nwcUrl, lightningAddress });
+}
+
 // ── ALBY ──
 
 export async function testAlbyConnection(albyHubUrl, albyAuthToken) {

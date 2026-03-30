@@ -17,12 +17,11 @@ lnurlp.get("/:username", async (c) => {
   const baseUrl = `${proto}://${host}`;
 
   // Find attendee by username (part before @)
-  // PostgreSQL: use LIKE with concatenation
   const attendee = await db
     .prepare(
-      "SELECT id, display_name, nwc_url, lightning_address FROM attendees WHERE lightning_address LIKE ? || '@%'"
+      "SELECT id, display_name, nwc_url, lightning_address FROM attendees WHERE lightning_address LIKE ?"
     )
-    .get(username);
+    .get(`${username}@%`);
 
   if (!attendee) {
     return c.json({ status: "ERROR", reason: "User not found" }, 404);
@@ -60,9 +59,9 @@ lnurlp.get("/:username/callback", async (c) => {
 
   const attendee = await db
     .prepare(
-      "SELECT id, display_name, nwc_url, lightning_address FROM attendees WHERE lightning_address LIKE ? || '@%'"
+      "SELECT id, display_name, nwc_url, lightning_address FROM attendees WHERE lightning_address LIKE ?"
     )
-    .get(username);
+    .get(`${username}@%`);
 
   if (!attendee) {
     return c.json({ status: "ERROR", reason: "User not found" }, 404);
