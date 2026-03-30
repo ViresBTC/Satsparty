@@ -121,7 +121,7 @@ function startOnboarding() {
 function startAdmin() {
   const app = document.getElementById("app");
   app.innerHTML = "";
-  app.className = "app--admin";
+  app.classList.add("app--admin");
   renderAdmin(app, {
     goTo,
     showToast,
