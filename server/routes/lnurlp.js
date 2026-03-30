@@ -73,30 +73,35 @@ lnurlp.get("/:username/callback", async (c) => {
 
   try {
     // Connect to attendee's wallet via NWC and create invoice
+    console.log("[LNURLP] Connecting to NWC for:", username, "amount:", amountMsat, "msats");
     const { nwc } = await import("@getalby/sdk");
     const client = new nwc.NWCClient({ nostrWalletConnectUrl: attendee.nwc_url });
 
+    console.log("[LNURLP] NWC client created, making invoice...");
     const result = await client.makeInvoice({
       amount: amountMsat, // already in millisats
       description: `Pago a ${attendee.display_name} via SatsParty`,
     });
 
+    console.log("[LNURLP] makeInvoice result keys:", Object.keys(result));
     await client.close();
 
     const invoice = result.invoice || result.paymentRequest || result.payment_request;
 
     if (!invoice) {
+      console.error("[LNURLP] No invoice in result:", JSON.stringify(result));
       return c.json({ status: "ERROR", reason: "Could not generate invoice" }, 500);
     }
 
+    console.log("[LNURLP] Invoice generated successfully for", username);
     return c.json({
       status: "OK",
       pr: invoice,
       routes: [],
     });
   } catch (err) {
-    console.error("[LNURLP] Error generating invoice:", err.message);
-    return c.json({ status: "ERROR", reason: "Invoice generation failed" }, 500);
+    console.error("[LNURLP] Error generating invoice:", err.message, err.stack?.split("\n").slice(0, 3));
+    return c.json({ status: "ERROR", reason: `Invoice generation failed: ${err.message}` }, 500);
   }
 });
 
