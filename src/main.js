@@ -12,6 +12,7 @@ import { generateQRSvg } from "./services/qr.js";
 import { renderOnboarding } from "./onboarding.js";
 import { renderDashboard } from "./dashboard.js";
 import { renderAdmin } from "./admin.js";
+import { renderLanding } from "./landing.js";
 
 // ── GLOBALS ──
 let currentScreen = null;
@@ -63,14 +64,25 @@ async function init() {
       }
     }
 
-    // Routing: /admin or #admin → panel admin, sino → flujo normal
-    const isAdmin = window.location.hash === "#admin" || window.location.pathname === "/admin";
+    // Routing
+    const path = window.location.pathname;
+    const isAdmin = window.location.hash === "#admin" || path === "/admin";
+    const isWallet = path === "/wallet";
+    const isOnboard = path.startsWith("/onboard/");
+    const hasEvent = !!eventParam;
+
     if (isAdmin) {
       startAdmin();
-    } else if (state.onboardingComplete && state.nwcUrl) {
-      startDashboard();
+    } else if (isWallet || isOnboard || hasEvent) {
+      // /wallet, /onboard/:code, or ?event= → wallet flow
+      if (state.onboardingComplete && state.nwcUrl) {
+        startDashboard();
+      } else {
+        startOnboarding();
+      }
     } else {
-      startOnboarding();
+      // / → landing page
+      startLanding();
     }
     // Fetch live prices (non-blocking)
     updatePrices();
@@ -133,6 +145,12 @@ function startOnboarding() {
     generateQRSvg,
     onStateChange,
   });
+}
+
+function startLanding() {
+  const app = document.getElementById("app");
+  app.innerHTML = "";
+  renderLanding(app, { goTo, showToast, getState, setState });
 }
 
 function startAdmin() {
