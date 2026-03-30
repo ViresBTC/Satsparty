@@ -43,8 +43,9 @@ function init() {
       }
     }
 
-    // Routing: #admin → panel admin, sino → flujo normal
-    if (window.location.hash === "#admin") {
+    // Routing: /admin or #admin → panel admin, sino → flujo normal
+    const isAdmin = window.location.hash === "#admin" || window.location.pathname === "/admin";
+    if (isAdmin) {
       startAdmin();
     } else if (eventParam && isEventClosed(eventParam)) {
       // Evento cerrado — bloquear acceso
@@ -69,6 +70,20 @@ if (document.readyState === "loading") {
 } else {
   init();
 }
+
+// Listen for hash changes (e.g. user navigates to #admin)
+window.addEventListener("hashchange", () => {
+  if (window.location.hash === "#admin") {
+    startAdmin();
+  }
+});
+
+// Listen for popstate (e.g. user navigates to /admin via history)
+window.addEventListener("popstate", () => {
+  if (window.location.pathname === "/admin") {
+    startAdmin();
+  }
+});
 
 // ── PRICES ──
 async function updatePrices() {
@@ -106,7 +121,7 @@ function startOnboarding() {
 function startAdmin() {
   const app = document.getElementById("app");
   app.innerHTML = "";
-  app.classList.add("app--admin");
+  app.className = "app--admin";
   renderAdmin(app, {
     goTo,
     showToast,

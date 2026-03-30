@@ -25,6 +25,10 @@
       "destination": "/api/[...route]"
     },
     {
+      "source": "/admin",
+      "destination": "/index.html"
+    },
+    {
       "source": "/onboard/:code",
       "destination": "/index.html"
     }
