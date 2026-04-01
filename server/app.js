@@ -11,6 +11,7 @@ import authRoutes from "./routes/auth.js";
 import eventRoutes from "./routes/events.js";
 import onboardRoutes from "./routes/onboard.js";
 import attendeeRoutes from "./routes/attendees.js";
+import walletRoutes from "./routes/wallet.js";
 import priceRoutes from "./routes/prices.js";
 import lnurlpRoutes from "./routes/lnurlp.js";
 
@@ -59,6 +60,7 @@ app.route("/api/auth", authRoutes);
 app.route("/api/events", eventRoutes);
 app.route("/api/onboard", onboardRoutes);
 app.route("/api/attendees", attendeeRoutes);
+app.route("/api/wallet", walletRoutes);
 app.route("/.well-known/lnurlp", lnurlpRoutes);
 
 export default app;

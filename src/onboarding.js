@@ -46,7 +46,12 @@ function setupOnboardingEvents() {
 
   // Security
   on("btn-toggle-key", "click", toggleKey);
-  on("btn-copy-key", "click", () => ctx.showToast("Clave copiada ✓"));
+  on("btn-copy-key", "click", () => {
+    const state = ctx.getState();
+    const key = state.attendeeToken || state.nwcUrl || "";
+    navigator.clipboard.writeText(key).catch(() => {});
+    ctx.showToast("Clave copiada ✓");
+  });
   on("btn-goto-dashboard", "click", () => ctx.onOnboardingComplete());
   on("btn-back-complete", "click", () => ctx.goTo("screen-complete"));
 
@@ -105,17 +110,12 @@ async function handleNameSubmit() {
   const eventCode = state.eventCode;
   let walletOk = false;
 
-  // Try to claim via backend (with timeout), fallback to demo mode
   if (eventCode) {
     await runCreationAnimation(async (step) => {
       if (step === 1) {
-        // Step 1 = "Creando Lightning Address"
-        let backendOk = false;
-
         try {
-          // Timeout de 4s para no quedarnos colgados si el backend no responde
           const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 4000);
+          const timeout = setTimeout(() => controller.abort(), 8000);
 
           const res = await fetch(`/api/onboard/${eventCode}/claim`, {
             method: "POST",
@@ -128,42 +128,33 @@ async function handleNameSubmit() {
           const data = await res.json();
 
           if (!res.ok) {
-            console.warn("[SatsParty] Backend rechazó claim:", data.error);
-            // No bloquear — fallback a demo mode abajo
-          } else {
-            // Save attendee data from backend
-            ctx.setState({
-              displayName: name,
-              lightningAddress: data.attendee.lightningAddress,
-              attendeeToken: data.attendee.token,
-              balance: data.attendee.balanceSats,
-              walletCreated: true,
-              nwcUrl: data.attendee.nwcUrl,
-            });
-            updateCreatedScreen(data.attendee.balanceSats);
-            backendOk = true;
+            ctx.showToast(data.error || "Error al registrarte");
+            ctx.goTo("screen-name");
+            return false;
           }
-        } catch (err) {
-          console.warn("[SatsParty] Backend no disponible, modo demo:", err.message || err);
-        }
 
-        // Fallback: demo mode si el backend no funcionó
-        if (!backendOk) {
-          const addr = generateLocalAddress(name);
+          // Save attendee data — custodial mode (no NWC)
+          api.setAttendeeToken(data.attendee.token);
           ctx.setState({
             displayName: name,
-            lightningAddress: addr,
-            balance: state.welcomeSats || 100,
+            lightningAddress: data.attendee.lightningAddress,
+            attendeeToken: data.attendee.token,
+            balance: data.attendee.balanceSats,
             walletCreated: true,
           });
-          updateCreatedScreen(state.welcomeSats || 100);
+          updateCreatedScreen(data.attendee.balanceSats);
+        } catch (err) {
+          console.error("[SatsParty] Backend error:", err.message || err);
+          ctx.showToast("Error de conexión. Intentá de nuevo.");
+          ctx.goTo("screen-name");
+          return false;
         }
       }
       return true;
     });
     walletOk = true;
   } else {
-    // No event code — demo mode directo
+    // No event code — demo mode
     await runCreationAnimation();
     const addr = generateLocalAddress(name);
     ctx.setState({
@@ -202,88 +193,67 @@ async function handleNewWallet() {
 }
 
 function handleExistingWallet() {
-  // Mostrar input para pegar NWC URL
   const connectBody = document.querySelector(".connect-body");
   if (!connectBody) return;
 
   connectBody.innerHTML = `
-    <p class="screen-label">Conectar wallet</p>
-    <h2 class="screen-title" style="font-size:2.5rem">Conectá<br>tu wallet</h2>
-    <p class="screen-desc">Ingresá tu nombre y tu NWC URL para recibir tu Lightning Address.</p>
-    <div class="field-label">Tu nombre</div>
-    <input class="field-input" type="text" id="nwc-name-input" placeholder="Ej: Juan" autocomplete="off" style="margin-bottom:.3rem"/>
-    <div id="nwc-name-preview" style="text-align:center;margin-bottom:1rem;">
-      <div style="font-family:var(--font-address);font-size:.85rem;color:var(--muted);font-weight:300;letter-spacing:.03em">nombre@${window.location.host}</div>
-    </div>
-    <div class="field-label">NWC Connection String</div>
-    <input class="field-input" type="text" id="nwc-input" placeholder="nostr+walletconnect://..." style="font-size:.75rem;font-family:var(--font-mono)"/>
-    <button class="btn btn-electric" id="btn-connect-nwc">Conectar ⚡</button>
+    <p class="screen-label">Recuperar cuenta</p>
+    <h2 class="screen-title" style="font-size:2.5rem">Ingresá<br>tu clave</h2>
+    <p class="screen-desc">Si ya te registraste antes, ingresá tu token para recuperar tu cuenta y saldo.</p>
+    <div class="field-label">Tu token de acceso</div>
+    <input class="field-input" type="text" id="recover-token-input" placeholder="Ej: abc123xyz..." style="font-size:.85rem;font-family:var(--font-mono);text-align:center" autocomplete="off"/>
+    <div id="recover-error" style="font-family:var(--font-mono);font-size:.6rem;color:var(--orange);text-align:center;min-height:1.2rem;margin-top:.3rem"></div>
+    <button class="btn btn-electric" id="btn-recover-account">Recuperar cuenta ⚡</button>
     <div style="height:.6rem"></div>
     <button class="btn btn-dim" id="btn-back-connect">← Volver</button>
   `;
 
-  // Live preview of Lightning Address
-  on("nwc-name-input", "input", () => {
-    const input = document.getElementById("nwc-name-input");
-    const preview = document.getElementById("nwc-name-preview");
-    if (!input || !preview) return;
-    const val = input.value.trim();
-    const clean = val
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[^a-z0-9]/g, "")
-      .slice(0, 20);
-    const addr = clean || "nombre";
-    preview.innerHTML = `<div style="font-family:var(--font-address);font-size:.85rem;color:${clean ? "var(--electric)" : "var(--muted)"};font-weight:300;letter-spacing:.03em">${addr}@${window.location.host}</div>`;
+  on("recover-token-input", "keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      document.getElementById("btn-recover-account")?.click();
+    }
   });
 
-  on("btn-connect-nwc", "click", async () => {
-    const nameInput = document.getElementById("nwc-name-input");
-    const nwcInput = document.getElementById("nwc-input");
-    const name = nameInput?.value?.trim();
-    const url = nwcInput?.value?.trim();
+  on("btn-recover-account", "click", async () => {
+    const tokenInput = document.getElementById("recover-token-input");
+    const errEl = document.getElementById("recover-error");
+    const token = tokenInput?.value?.trim();
 
-    if (!name || name.length < 2) {
-      ctx.showToast("Ingresá tu nombre (mínimo 2 letras)");
-      return;
-    }
-    if (!url || !url.startsWith("nostr+walletconnect://")) {
-      ctx.showToast("URL inválida — debe empezar con nostr+walletconnect://");
+    if (errEl) errEl.textContent = "";
+
+    if (!token) {
+      if (errEl) errEl.textContent = "Ingresá tu token";
       return;
     }
 
-    const addr = generateLocalAddress(name);
-    ctx.setState({ nwcUrl: url, displayName: name, lightningAddress: addr });
-    ctx.goTo("screen-creating");
+    const btn = document.getElementById("btn-recover-account");
+    if (btn) { btn.disabled = true; btn.textContent = "Verificando..."; }
 
-    await runCreationAnimation(async (step) => {
-      if (step === 0) {
-        try {
-          const result = await ctx.onWalletCreated(url);
-          updateCreatedScreen(result.balance);
+    try {
+      const data = await api.recoverAccount(token);
+      const attendee = data.attendee;
 
-          // Register in backend so Lightning Address works via LNURL
-          try {
-            await api.registerAttendee(name, url, addr);
-            console.log("[Onboarding] Attendee registered in backend:", addr);
-          } catch (regErr) {
-            console.warn("[Onboarding] Backend register failed (LA may not work):", regErr.message);
-          }
-        } catch (err) {
-          ctx.showToast("Error: " + err.message);
-          ctx.goTo("screen-connect");
-          return false;
-        }
-      }
-      return true;
-    });
+      // Save recovered data to state
+      api.setAttendeeToken(attendee.token);
+      ctx.setState({
+        displayName: attendee.displayName,
+        lightningAddress: attendee.lightningAddress,
+        attendeeToken: attendee.token,
+        balance: attendee.balanceSats,
+        onboardingComplete: true,
+        walletCreated: true,
+      });
 
-    ctx.goTo("screen-created");
+      ctx.showToast(`Bienvenido de vuelta, ${attendee.displayName}!`);
+      ctx.onOnboardingComplete();
+    } catch (err) {
+      if (errEl) errEl.textContent = err.message || "Token inválido";
+      if (btn) { btn.disabled = false; btn.textContent = "Recuperar cuenta ⚡"; }
+    }
   });
 
   on("btn-back-connect", "click", () => {
-    // Re-render onboarding
     const app = document.getElementById("app");
     renderOnboarding(app, ctx);
     ctx.goTo("screen-connect");
@@ -512,7 +482,7 @@ function getOnboardingHTML() {
   const state = ctx.getState();
   const eventName = state.eventName || "La Crypta Meetup";
   const eventDate = state.eventDate || "Marzo 2026";
-  const nwcUrl = state.nwcUrl || "nostr+walletconnect://...";
+  const attendeeToken = state.attendeeToken || "...";
 
   return `
   <!-- SCREEN: WELCOME -->
@@ -581,10 +551,10 @@ function getOnboardingHTML() {
           <span class="option-tag">Recomendado</span>
         </div>
         <div class="connect-option" id="btn-existing-wallet">
-          <div class="option-icon">🔌</div>
+          <div class="option-icon">🔑</div>
           <div class="option-content">
-            <div class="option-title">Conectar la mía</div>
-            <div class="option-desc">Tengo Alby, Zeus, Wallet of Satoshi u otra</div>
+            <div class="option-title">Ya tengo cuenta</div>
+            <div class="option-desc">Recuperar con mi clave (token)</div>
           </div>
         </div>
         <div style="margin-top: auto; padding-top: 1rem;">
@@ -851,27 +821,20 @@ function getOnboardingHTML() {
       <h2 class="screen-title" style="font-size:3rem;margin-bottom:1.2rem;">Tus<br>claves.</h2>
       <div class="security-warning">
         <span style="font-size:1rem;flex-shrink:0;margin-top:0.1rem;">⚠️</span>
-        <span class="warning-text">Esta clave es el único acceso a tu wallet. Quien la tenga puede gastar tus sats. Guardala en un lugar seguro y nunca la compartas.</span>
+        <span class="warning-text">Este token es tu único acceso a tu cuenta. Guardalo en un lugar seguro. Con él podés recuperar tu saldo desde cualquier dispositivo.</span>
       </div>
       <div class="key-card">
         <div class="key-card-header">
-          <span class="key-card-title">Clave de acceso</span>
+          <span class="key-card-title">Tu token de acceso</span>
           <button class="key-toggle" id="btn-toggle-key">Mostrar</button>
         </div>
-        <div class="key-value" id="key-value">${nwcUrl}</div>
+        <div class="key-value" id="key-value">${attendeeToken}</div>
         <div style="display:flex;gap:0.6rem;">
           <button class="btn btn-dim btn-ghost-small" style="flex:1" id="btn-copy-key">Copiar</button>
         </div>
       </div>
-      <div style="background:var(--dim);border:1px solid var(--mid);padding:1.5rem;text-align:center;margin-bottom:1rem;">
-        <p style="font-family:var(--font-mono);font-size:0.6rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:1rem;">QR para importar</p>
-        <div style="background:var(--white);padding:1rem;display:inline-block;margin-bottom:0.8rem;" id="security-qr">
-          <!-- QR gets rendered here -->
-        </div>
-        <p style="font-family:var(--font-mono);font-size:0.65rem;color:var(--muted);line-height:1.6;">Escaneá con Alby Go para<br>importar tu wallet al celu</p>
-      </div>
       <p style="font-family:var(--font-mono);font-size:0.6rem;letter-spacing:0.08em;color:var(--muted);text-align:center;line-height:1.7;margin-bottom:1rem;">
-        Compatible con Alby, Zeus, Mutiny,<br>y cualquier wallet con soporte NWC
+        Podés usar este token para recuperar tu cuenta<br>desde otro navegador o dispositivo.
       </p>
       <button class="btn btn-electric" id="btn-goto-dashboard">Ir a mi wallet ⚡</button>
     </div>

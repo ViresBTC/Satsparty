@@ -22,6 +22,7 @@ async function init() {
   try {
     console.log("[SatsParty] Iniciando...");
     loadState();
+    api.loadAttendeeToken();
     const state = getState();
     console.log("[SatsParty] Estado:", JSON.stringify({ onboardingComplete: state.onboardingComplete, hasNwc: !!state.nwcUrl }));
 
@@ -75,7 +76,7 @@ async function init() {
       startAdmin();
     } else if (isWallet || isOnboard || hasEvent) {
       // /wallet, /onboard/:code, or ?event= → wallet flow
-      if (state.onboardingComplete && state.nwcUrl) {
+      if (state.onboardingComplete && (state.nwcUrl || state.attendeeToken)) {
         startDashboard();
       } else {
         startOnboarding();

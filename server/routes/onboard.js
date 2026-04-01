@@ -1,6 +1,5 @@
 import { Hono } from "hono";
 import { nanoid } from "nanoid";
-import { createSubWallet } from "../services/alby.js";
 
 const onboard = new Hono();
 
@@ -57,7 +56,7 @@ onboard.get("/:code", async (c) => {
   });
 });
 
-// POST /api/onboard/:code/claim — create attendee + wallet
+// POST /api/onboard/:code/claim — create attendee with custodial wallet
 onboard.post("/:code/claim", async (c) => {
   const db = c.get("db");
   const code = c.req.param("code");
@@ -98,72 +97,45 @@ onboard.post("/:code/claim", async (c) => {
   const host = c.req.header("host") || "localhost";
   const lightningAddress = generateLightningAddress(displayName.trim(), host);
 
-  // Welcome sats
+  // Welcome sats (custodial — credited directly to virtual balance)
   const welcomeSats = event.welcome_sats || 100;
-
-  // Create real Alby Hub sub-wallet if credentials are configured
-  let nwcUrl = null;
-  let lud16 = null;
-  let walletPubkey = null;
-  let welcomeFunded = false;
-
-  if (event.alby_hub_url && event.alby_auth_token) {
-    try {
-      console.log(`[Alby] Creating sub-wallet for "${displayName.trim()}"...`);
-      const wallet = await createSubWallet(
-        event.alby_hub_url,
-        event.alby_auth_token,
-        displayName.trim(),
-        0 // no max budget for isolated wallet
-      );
-      nwcUrl = wallet.nwcUrl;
-      lud16 = wallet.lud16;
-      walletPubkey = wallet.walletPubkey;
-      console.log(`[Alby] Sub-wallet created: appId=${wallet.appId}, lud16=${lud16 || "none"}`);
-    } catch (err) {
-      console.error("[Alby] Failed to create sub-wallet:", err.message);
-      // Continue without NWC — attendee gets a record but no real wallet
-    }
-  }
-
-  // Use Alby's lud16 if available, otherwise generate one
-  const finalLightningAddress = lud16 || lightningAddress;
 
   try {
     const result = await db
       .prepare(
-        `INSERT INTO attendees (event_id, token, display_name, lightning_address, nwc_url, wallet_pubkey, balance_sats, welcome_funded)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
+        `INSERT INTO attendees (event_id, token, display_name, lightning_address, balance_sats, welcome_funded, onboarding_complete)
+         VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`
       )
       .run(
         event.id,
         token,
         displayName.trim(),
-        finalLightningAddress,
-        nwcUrl,
-        walletPubkey,
-        nwcUrl ? 0 : welcomeSats, // real wallet starts at 0 (needs funding), demo gets welcomeSats
-        nwcUrl ? 0 : 1 // not funded yet if real wallet
+        lightningAddress,
+        welcomeSats,
+        1,
+        0
       );
 
-    const attendee = await db
-      .prepare("SELECT * FROM attendees WHERE id = ?")
-      .get(result.lastInsertRowid);
+    // Record welcome transaction
+    await db
+      .prepare(
+        "INSERT INTO transactions (attendee_id, type, amount_sats, fee_sats, description) VALUES (?, ?, ?, ?, ?)"
+      )
+      .run(result.lastInsertRowid, "welcome", welcomeSats, 0, `Bienvenida ${event.name}`);
 
     console.log(
-      `⚡ Nuevo asistente: ${displayName.trim()} → ${finalLightningAddress} (wallet: ${nwcUrl ? "real" : "demo"})`
+      `⚡ Nuevo asistente: ${displayName.trim()} → ${lightningAddress} (custodial, ${welcomeSats} sats)`
     );
 
     return c.json(
       {
         attendee: {
-          id: attendee.id,
-          token: attendee.token,
-          displayName: attendee.display_name,
-          lightningAddress: attendee.lightning_address,
-          balanceSats: attendee.balance_sats,
-          welcomeFunded: !!attendee.welcome_funded,
-          nwcUrl: attendee.nwc_url,
+          id: result.lastInsertRowid,
+          token,
+          displayName: displayName.trim(),
+          lightningAddress,
+          balanceSats: welcomeSats,
+          welcomeFunded: true,
         },
         event: {
           name: event.name,
@@ -180,17 +152,15 @@ onboard.post("/:code/claim", async (c) => {
 
 /**
  * Generate a lightning address from a display name
- * Domain is auto-detected from the request host
  */
 function generateLightningAddress(name, host) {
   const sanitized = name
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "") // remove accents
-    .replace(/[^a-z0-9]/g, "") // only alphanumeric
-    .slice(0, 20); // max 20 chars
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]/g, "")
+    .slice(0, 20);
 
-  // Add random suffix to avoid collisions
   const suffix = nanoid(4).toLowerCase();
   return `${sanitized || "user"}${suffix}@${host}`;
 }

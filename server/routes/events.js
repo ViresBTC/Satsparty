@@ -1,24 +1,10 @@
 import { Hono } from "hono";
 import { nanoid } from "nanoid";
 import { requireAdmin } from "../middleware/auth.js";
-import { testConnection } from "../services/alby.js";
 
 const events = new Hono();
 
-// ── POST /api/events/test-alby — test Alby Hub connection (no auth required) ──
-events.post("/test-alby", async (c) => {
-  const body = await c.req.json();
-  const { albyHubUrl, albyAuthToken } = body;
-
-  if (!albyHubUrl || !albyAuthToken) {
-    return c.json({ error: "albyHubUrl y albyAuthToken son requeridos" }, 400);
-  }
-
-  const result = await testConnection(albyHubUrl, albyAuthToken);
-  return c.json(result);
-});
-
-// All other event routes require admin auth
+// All event routes require admin auth
 events.use("*", requireAdmin());
 
 // ── POST /api/events — create event ──
@@ -26,17 +12,10 @@ events.post("/", async (c) => {
   const db = c.get("db");
   const body = await c.req.json();
 
-  const { name, date, welcomeSats, maxAttendees, albyHubUrl, albyAuthToken } =
-    body;
+  const { name, date, welcomeSats, maxAttendees, nwcUrl } = body;
 
-  // Validate required fields
-  if (!name || !date || !albyHubUrl || !albyAuthToken) {
-    return c.json(
-      {
-        error: "Campos requeridos: name, date, albyHubUrl, albyAuthToken",
-      },
-      400
-    );
+  if (!name || !date) {
+    return c.json({ error: "Campos requeridos: name, date" }, 400);
   }
 
   // Generate unique 8-char event code for QR links
@@ -45,8 +24,8 @@ events.post("/", async (c) => {
   try {
     const result = await db
       .prepare(
-        `INSERT INTO events (name, date, code, welcome_sats, max_attendees, alby_hub_url, alby_auth_token)
-       VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`
+        `INSERT INTO events (name, date, code, welcome_sats, max_attendees, nwc_url)
+       VALUES (?, ?, ?, ?, ?, ?) RETURNING id`
       )
       .run(
         name,
@@ -54,8 +33,7 @@ events.post("/", async (c) => {
         code,
         welcomeSats || 100,
         maxAttendees || 100,
-        albyHubUrl,
-        albyAuthToken
+        nwcUrl || null
       );
 
     const event = await db
@@ -183,8 +161,7 @@ events.patch("/:id", async (c) => {
     "date",
     "welcomeSats",
     "maxAttendees",
-    "albyHubUrl",
-    "albyAuthToken",
+    "nwcUrl",
     "status",
   ];
   const dbFieldMap = {
@@ -192,8 +169,7 @@ events.patch("/:id", async (c) => {
     date: "date",
     welcomeSats: "welcome_sats",
     maxAttendees: "max_attendees",
-    albyHubUrl: "alby_hub_url",
-    albyAuthToken: "alby_auth_token",
+    nwcUrl: "nwc_url",
     status: "status",
   };
 
@@ -249,8 +225,7 @@ function sanitizeEvent(event) {
     maxAttendees: event.max_attendees,
     status: event.status,
     createdAt: event.created_at,
-    // Don't expose alby credentials in API responses
-    hasAlbyConfig: !!(event.alby_hub_url && event.alby_auth_token),
+    hasNwcConfig: !!event.nwc_url,
   };
 }
 

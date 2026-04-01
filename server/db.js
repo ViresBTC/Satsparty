@@ -149,12 +149,24 @@ async function migrate(sql) {
       code TEXT UNIQUE NOT NULL,
       welcome_sats INTEGER DEFAULT 100,
       max_attendees INTEGER DEFAULT 100,
-      alby_hub_url TEXT NOT NULL,
-      alby_auth_token TEXT NOT NULL,
+      nwc_url TEXT,
+      alby_hub_url TEXT,
+      alby_auth_token TEXT,
       status TEXT DEFAULT 'active',
       created_at TIMESTAMP DEFAULT NOW()
     )
   `;
+
+  // Migration: add nwc_url to events if missing (existing DBs)
+  try {
+    await sql`ALTER TABLE events ADD COLUMN IF NOT EXISTS nwc_url TEXT`;
+  } catch (_) {}
+
+  // Migration: make alby fields nullable (no longer required)
+  try {
+    await sql`ALTER TABLE events ALTER COLUMN alby_hub_url DROP NOT NULL`;
+    await sql`ALTER TABLE events ALTER COLUMN alby_auth_token DROP NOT NULL`;
+  } catch (_) {}
 
   await sql`
     CREATE TABLE IF NOT EXISTS attendees (
@@ -205,6 +217,22 @@ async function migrate(sql) {
   if (existing.length === 0) {
     await sql`INSERT INTO price_cache (id, btc_usd, usd_ars) VALUES (1, 84210, 1285)`;
   }
+
+  // Transactions table for custodial wallet
+  await sql`
+    CREATE TABLE IF NOT EXISTS transactions (
+      id SERIAL PRIMARY KEY,
+      attendee_id INTEGER NOT NULL REFERENCES attendees(id),
+      type TEXT NOT NULL,
+      amount_sats INTEGER NOT NULL,
+      fee_sats INTEGER DEFAULT 0,
+      description TEXT,
+      payment_hash TEXT,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `;
+
+  await sql`CREATE INDEX IF NOT EXISTS idx_transactions_attendee ON transactions(attendee_id)`;
 
   console.log("✓ Database migrated successfully");
 }

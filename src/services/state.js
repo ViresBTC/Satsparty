@@ -10,6 +10,7 @@ const STORAGE_KEY = "satsparty_state";
 const defaultState = {
   // Wallet
   nwcUrl: null,
+  attendeeToken: null,
   lightningAddress: null,
   balance: 0,
   walletCreated: false,
@@ -99,6 +100,7 @@ export function onStateChange(fn) {
 export function resetState() {
   state = { ...defaultState };
   localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem("satsparty_attendee_token");
 }
 
 /**

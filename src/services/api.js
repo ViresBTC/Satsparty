@@ -1,14 +1,14 @@
 /**
  * SatsParty — API Client
  *
- * HTTP client para el backend. Maneja JWT y wrappea todos los endpoints.
- * Todos los métodos lanzan Error si el backend responde con error.
+ * HTTP client para el backend. Maneja JWT y tokens de attendee.
  */
 
 const API_BASE = "/api";
-let _token = null;
+let _token = null;        // admin JWT
+let _attendeeToken = null; // attendee token for wallet API
 
-// ── JWT ──
+// ── JWT (admin) ──
 
 export function setToken(token) {
   _token = token;
@@ -29,6 +29,27 @@ export function hasToken() {
   return !!_token || !!localStorage.getItem("satsparty_jwt");
 }
 
+// ── Attendee Token ──
+
+export function setAttendeeToken(token) {
+  _attendeeToken = token;
+  localStorage.setItem("satsparty_attendee_token", token);
+}
+
+export function loadAttendeeToken() {
+  _attendeeToken = localStorage.getItem("satsparty_attendee_token");
+  return _attendeeToken;
+}
+
+export function clearAttendeeToken() {
+  _attendeeToken = null;
+  localStorage.removeItem("satsparty_attendee_token");
+}
+
+export function getAttendeeToken() {
+  return _attendeeToken || localStorage.getItem("satsparty_attendee_token");
+}
+
 // ── HTTP ──
 
 function headers() {
@@ -37,8 +58,29 @@ function headers() {
   return h;
 }
 
+function walletHeaders() {
+  const token = _attendeeToken || localStorage.getItem("satsparty_attendee_token");
+  return {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${token}`,
+  };
+}
+
 async function request(method, path, body) {
   const opts = { method, headers: headers() };
+  if (body) opts.body = JSON.stringify(body);
+
+  const res = await fetch(API_BASE + path, opts);
+  const data = await res.json();
+
+  if (!res.ok) {
+    throw new Error(data.error || `HTTP ${res.status}`);
+  }
+  return data;
+}
+
+async function walletRequest(method, path, body) {
+  const opts = { method, headers: walletHeaders() };
   if (body) opts.body = JSON.stringify(body);
 
   const res = await fetch(API_BASE + path, opts);
@@ -102,8 +144,30 @@ export async function fetchEventByCode(code) {
 
 // ── ATTENDEES ──
 
-export async function registerAttendee(displayName, nwcUrl, lightningAddress) {
-  return request("POST", "/attendees/register", { displayName, nwcUrl, lightningAddress });
+export async function recoverAccount(token) {
+  return request("POST", "/attendees/recover", { token });
+}
+
+// ── WALLET (custodial) ──
+
+export async function getWalletBalance() {
+  return walletRequest("GET", "/wallet/balance");
+}
+
+export async function getWalletTransactions(limit = 50) {
+  return walletRequest("GET", `/wallet/transactions?limit=${limit}`);
+}
+
+export async function walletPay(invoice, description) {
+  return walletRequest("POST", "/wallet/pay", { invoice, description });
+}
+
+export async function walletCreateInvoice(amountSats, description) {
+  return walletRequest("POST", "/wallet/invoice", { amountSats, description });
+}
+
+export async function walletCheckInvoice(paymentHash) {
+  return walletRequest("GET", `/wallet/check-invoice/${paymentHash}`);
 }
 
 // ── ALBY ──

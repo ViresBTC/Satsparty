@@ -115,7 +115,7 @@ function getLandingHTML() {
       <section class="landing-section">
         <div class="landing-organizer-box">
           <h2>¿Organizás un evento Bitcoin?</h2>
-          <p>SatsParty se conecta a tu Alby Hub y crea wallets aisladas para cada asistente automáticamente. Vos controlás todo desde el panel admin.</p>
+          <p>Conectá tu wallet Lightning con NWC y SatsParty se encarga del resto. Cada asistente recibe su cuenta con sats automáticamente. Vos controlás todo desde el panel admin.</p>
           <button id="landing-btn-organizer-2" class="landing-btn landing-btn-primary" onclick="window.location.href='/admin'">Crear mi evento</button>
         </div>
       </section>

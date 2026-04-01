@@ -214,16 +214,15 @@ function getAdminHTML() {
             <div class="admin-card">
               <div class="admin-card-title">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-                Alby Hub
+                Wallet del evento
               </div>
               <div class="admin-card-body">
-                <div class="field-label">URL del Alby Hub</div>
-                <input class="field-input" id="admin-alby-url" placeholder="https://tu-hub.albylndhub.com" autocomplete="off"/>
-                <div class="field-label" style="margin-top:.75rem">Auth Token</div>
-                <input class="field-input" id="admin-alby-token" type="password" placeholder="Token de autenticaci\u00f3n" autocomplete="off"/>
-                <div class="admin-alby-hint" id="admin-alby-hint" style="display:none;margin-top:.5rem;font-size:.75rem;color:var(--green);"></div>
-                <button class="btn btn-dim admin-btn" id="btn-test-alby" style="margin-top:.75rem">Probar Conexi\u00f3n</button>
-                <div class="admin-nwc-status" id="admin-alby-status"></div>
+                <div class="field-label">NWC Connection String</div>
+                <input class="field-input" id="admin-nwc-url" placeholder="nostr+walletconnect://..." autocomplete="off" style="font-size:.75rem;font-family:var(--font-mono)"/>
+                <div style="font-family:var(--font-mono);font-size:.5rem;color:var(--muted);margin-top:.4rem;line-height:1.5">Esta wallet fondea a los asistentes y procesa pagos.</div>
+                <div class="admin-alby-hint" id="admin-nwc-hint" style="display:none;margin-top:.5rem;font-size:.75rem;color:var(--green);"></div>
+                <button class="btn btn-dim admin-btn" id="btn-test-nwc" style="margin-top:.75rem">Probar Conexi\u00f3n</button>
+                <div class="admin-nwc-status" id="admin-nwc-status"></div>
               </div>
             </div>
           </div>
@@ -336,7 +335,7 @@ function setupEvents() {
   onClick("btn-delete-event", handleDeleteEvent);
   onClick("btn-close-event", handleCloseEvent);
   onClick("btn-reopen-event", handleReopenEvent);
-  onClick("btn-test-alby", handleTestAlby);
+  onClick("btn-test-nwc", handleTestNwc);
   onClick("btn-copy-link", handleCopyLink);
 
   // Auto-detect domain and live preview
@@ -537,9 +536,8 @@ async function showEventForm(eventId) {
   const dateInput = document.getElementById("admin-event-date");
   const satsInput = document.getElementById("admin-welcome-sats");
   const maxInput = document.getElementById("admin-max-attendees");
-  const albyUrlInput = document.getElementById("admin-alby-url");
-  const albyTokenInput = document.getElementById("admin-alby-token");
-  const albyHint = document.getElementById("admin-alby-hint");
+  const nwcUrlInput = document.getElementById("admin-nwc-url");
+  const nwcHint = document.getElementById("admin-nwc-hint");
   const lnDomainInput = document.getElementById("admin-ln-domain");
   const statsCard = document.getElementById("event-stats-card");
   const qrCard = document.getElementById("event-qr-card");
@@ -547,9 +545,9 @@ async function showEventForm(eventId) {
   const closeBtn = document.getElementById("btn-close-event");
   const reopenBtn = document.getElementById("btn-reopen-event");
   const closedBanner = document.getElementById("event-closed-banner");
-  const albyStatus = document.getElementById("admin-alby-status");
+  const nwcStatus = document.getElementById("admin-nwc-status");
 
-  if (albyStatus) albyStatus.innerHTML = "";
+  if (nwcStatus) nwcStatus.innerHTML = "";
 
   if (isNew) {
     // Form vac\u00edo para crear
@@ -557,9 +555,8 @@ async function showEventForm(eventId) {
     if (dateInput) dateInput.value = "";
     if (satsInput) satsInput.value = "100";
     if (maxInput) maxInput.value = "0";
-    if (albyUrlInput) albyUrlInput.value = "";
-    if (albyTokenInput) albyTokenInput.value = "";
-    if (albyHint) albyHint.style.display = "none";
+    if (nwcUrlInput) nwcUrlInput.value = "";
+    if (nwcHint) nwcHint.style.display = "none";
     if (lnDomainInput) lnDomainInput.value = window.location.host;
     if (statsCard) statsCard.style.display = "none";
     if (qrCard) qrCard.style.display = "none";
@@ -604,15 +601,14 @@ async function showEventForm(eventId) {
     if (satsInput) satsInput.value = evt.welcomeSats || 100;
     if (maxInput) maxInput.value = evt.maxAttendees || 0;
 
-    // Alby Hub fields — credentials not returned by backend (security)
-    if (albyUrlInput) albyUrlInput.value = "";
-    if (albyTokenInput) albyTokenInput.value = "";
-    if (albyHint) {
-      if (evt.hasAlbyConfig) {
-        albyHint.textContent = "Credenciales guardadas de forma segura en el servidor";
-        albyHint.style.display = "block";
+    // NWC URL — not returned by backend for security
+    if (nwcUrlInput) nwcUrlInput.value = "";
+    if (nwcHint) {
+      if (evt.hasNwcConfig) {
+        nwcHint.textContent = "NWC guardado de forma segura en el servidor";
+        nwcHint.style.display = "block";
       } else {
-        albyHint.style.display = "none";
+        nwcHint.style.display = "none";
       }
     }
 
@@ -717,8 +713,7 @@ async function handleSaveEvent() {
   const date = document.getElementById("admin-event-date")?.value?.trim();
   const sats = parseInt(document.getElementById("admin-welcome-sats")?.value) || 100;
   const maxAtt = parseInt(document.getElementById("admin-max-attendees")?.value) || 0;
-  const albyUrl = document.getElementById("admin-alby-url")?.value?.trim();
-  const albyToken = document.getElementById("admin-alby-token")?.value?.trim();
+  const nwcUrl = document.getElementById("admin-nwc-url")?.value?.trim();
   const lnDomain = document.getElementById("admin-ln-domain")?.value?.trim();
 
   if (!name) {
@@ -731,14 +726,13 @@ async function handleSaveEvent() {
       if (activeEventId) {
         // Editar existente
         const updates = { name, date, welcomeSats: sats, maxAttendees: maxAtt, lnDomain };
-        if (albyUrl) updates.albyHubUrl = albyUrl;
-        if (albyToken) updates.albyAuthToken = albyToken;
+        if (nwcUrl) updates.nwcUrl = nwcUrl;
         await api.updateEvent(activeEventId, updates);
         ctx.showToast("Evento actualizado");
       } else {
-        // Crear nuevo \u2014 Alby Hub es requerido
-        if (!albyUrl || !albyToken) {
-          ctx.showToast("Ingres\u00e1 la URL y token de Alby Hub");
+        // Crear nuevo — NWC es requerido
+        if (!nwcUrl) {
+          ctx.showToast("Ingresá el NWC Connection String");
           return;
         }
         const data = await api.createEvent({
@@ -746,8 +740,7 @@ async function handleSaveEvent() {
           date,
           welcomeSats: sats,
           maxAttendees: maxAtt,
-          albyHubUrl: albyUrl,
-          albyAuthToken: albyToken,
+          nwcUrl,
           lnDomain,
         });
         activeEventId = data.event.id;
@@ -870,29 +863,27 @@ function handleCopyLink() {
   });
 }
 
-async function handleTestAlby() {
-  const albyUrl = document.getElementById("admin-alby-url")?.value?.trim();
-  const albyToken = document.getElementById("admin-alby-token")?.value?.trim();
-  const statusEl = document.getElementById("admin-alby-status");
+async function handleTestNwc() {
+  const nwcUrl = document.getElementById("admin-nwc-url")?.value?.trim();
+  const statusEl = document.getElementById("admin-nwc-status");
 
-  if (!albyUrl || !albyToken) {
-    if (statusEl) statusEl.innerHTML = '<span style="color:var(--orange)">Ingres\u00e1 URL y token del Alby Hub</span>';
+  if (!nwcUrl || !nwcUrl.startsWith("nostr+walletconnect://")) {
+    if (statusEl) statusEl.innerHTML = '<span style="color:var(--orange)">Ingres\u00e1 un NWC v\u00e1lido (nostr+walletconnect://...)</span>';
     return;
   }
 
-  if (statusEl) statusEl.innerHTML = '<span style="color:var(--muted)">Conectando...</span>';
+  if (statusEl) statusEl.innerHTML = '<span style="color:var(--muted)">Probando conexi\u00f3n...</span>';
 
   try {
-    const data = await api.testAlbyConnection(albyUrl, albyToken);
+    // Test NWC by connecting and getting info
+    const info = await ctx.nwcService.connect(nwcUrl);
+    const balance = await ctx.nwcService.getBalance();
+    ctx.nwcService.disconnect();
 
-    if (data.ok) {
-      if (statusEl) {
-        statusEl.innerHTML = `<span style="color:var(--green)">Conectado \u2014 ${data.appCount ?? 0} apps existentes</span>`;
-      }
-      ctx.showToast("Alby Hub conectado");
-    } else {
-      throw new Error(data.error || "Conexión fallida");
+    if (statusEl) {
+      statusEl.innerHTML = `<span style="color:var(--green)">Conectado \u2014 Balance: ${balance.toLocaleString()} sats</span>`;
     }
+    ctx.showToast("Wallet conectada");
   } catch (err) {
     if (statusEl) {
       statusEl.innerHTML = `<span style="color:#ff4444">Error: ${err.message}</span>`;
@@ -914,7 +905,7 @@ function apiEventToLocal(apiEvt) {
     welcomeSats: apiEvt.welcomeSats,
     maxAttendees: apiEvt.maxAttendees,
     closed: apiEvt.status === "closed",
-    hasAlbyConfig: apiEvt.hasAlbyConfig,
+    hasNwcConfig: apiEvt.hasNwcConfig,
     lnDomain: apiEvt.lnDomain || "",
     attendees: apiEvt.attendeeCount || 0,
     satsDistributed: 0,

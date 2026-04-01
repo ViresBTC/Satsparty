@@ -7,6 +7,7 @@
 
 import { LightningAddress } from "@getalby/lightning-tools";
 import { Html5Qrcode } from "html5-qrcode";
+import * as api from "./services/api.js";
 
 let ctx = {};
 let currentView = "s-dashboard";
@@ -14,6 +15,14 @@ let currencyIdx = 0;
 let sendCurIdx = 0; // 0=SATS, 1=USD, 2=ARS
 let qrScanner = null;
 let balancePollingInterval = null;
+
+/**
+ * Check if wallet is in custodial mode (event-based, no NWC)
+ */
+function isCustodial() {
+  const state = ctx.getState();
+  return !!state.attendeeToken && !state.nwcUrl;
+}
 
 export function renderDashboard(app, context) {
   ctx = context;
@@ -34,44 +43,54 @@ async function initDashboard() {
     qrContainer.innerHTML = ctx.generateQRSvg(addr, 150);
   }
 
-  // Reconectar NWC
-  const connected = await ctx.reconnectWallet();
-  if (connected) {
+  // Load attendee token for API calls
+  api.loadAttendeeToken();
+
+  if (isCustodial()) {
+    // Custodial mode: balance comes from API
     await refreshBalance();
     await refreshHistory();
+  } else {
+    // NWC mode: reconnect wallet
+    const connected = await ctx.reconnectWallet();
+    if (connected) {
+      await refreshBalance();
+      await refreshHistory();
+    }
   }
 
   setupDashboardEvents();
-  // Activar primera misión en onboarding si aplica
   activateMission(1);
-
-  // Start background balance polling (detects incoming Lightning Address payments)
   startBalancePolling();
 }
 
 function startBalancePolling() {
-  // Clear any existing interval
   if (balancePollingInterval) clearInterval(balancePollingInterval);
 
   balancePollingInterval = setInterval(async () => {
     try {
-      if (!ctx.nwcService?.isConnected()) return;
       const oldBalance = ctx.getState().balance || 0;
-      const newBalance = await ctx.nwcService.getBalance();
+      let newBalance;
+
+      if (isCustodial()) {
+        const data = await api.getWalletBalance();
+        newBalance = data.balance;
+      } else {
+        if (!ctx.nwcService?.isConnected()) return;
+        newBalance = await ctx.nwcService.getBalance();
+      }
 
       if (newBalance > oldBalance) {
         const received = newBalance - oldBalance;
         ctx.setState({ balance: newBalance });
         updateBalanceDisplay();
-
-        // Show notification
         showIncomingPayment(received, newBalance);
         console.log(`[Dashboard] Incoming payment detected: +${received} sats`);
       }
     } catch (_) {
       // Silently ignore polling errors
     }
-  }, 8000); // Check every 8 seconds
+  }, 8000);
 }
 
 function showIncomingPayment(amountSats, newBalance) {
@@ -184,7 +203,8 @@ function setupDashboardEvents() {
     document.getElementById("settings-key-val")?.classList.toggle("shown");
   });
   onClick("btn-copy-nwc", () => {
-    copyToClipboard(ctx.getState().nwcUrl || "");
+    const state = ctx.getState();
+    copyToClipboard(state.attendeeToken || state.nwcUrl || "");
   });
   onClick("btn-reset-wallet", () => {
     if (confirm("¿Seguro? Vas a perder el acceso a esta wallet si no guardaste la clave.")) {
@@ -319,8 +339,14 @@ function navTo(id) {
 
 async function refreshBalance() {
   try {
-    if (!ctx.nwcService.isConnected()) return;
-    const bal = await ctx.nwcService.getBalance();
+    let bal;
+    if (isCustodial()) {
+      const data = await api.getWalletBalance();
+      bal = data.balance;
+    } else {
+      if (!ctx.nwcService.isConnected()) return;
+      bal = await ctx.nwcService.getBalance();
+    }
     ctx.setState({ balance: bal });
     updateBalanceDisplay();
   } catch (err) {
@@ -409,12 +435,22 @@ function getDemoTransactions() {
 
 async function refreshHistory() {
   try {
-    if (ctx.nwcService.isConnected()) {
+    if (isCustodial()) {
+      const data = await api.getWalletTransactions(20);
+      const txs = data.transactions.map((tx) => ({
+        type: tx.type === "send" ? "out" : "in",
+        amount: tx.amount,
+        description: tx.description || "",
+        timestamp: Math.floor(new Date(tx.createdAt).getTime() / 1000),
+        settled: true,
+      }));
+      ctx.setState({ transactions: txs });
+      renderHistoryList(txs);
+    } else if (ctx.nwcService.isConnected()) {
       const txs = await ctx.nwcService.listTransactions(20);
       ctx.setState({ transactions: txs });
       renderHistoryList(txs);
     } else {
-      // Demo mode: show example transactions
       const demoTxs = getDemoTransactions();
       renderHistoryList(demoTxs);
     }
@@ -585,56 +621,61 @@ async function generateInvoice() {
   else sats = Math.round(val / satArs);
 
   try {
-    if (ctx.nwcService.isConnected()) {
-      // Real invoice
+    let paymentRequest, paymentHash;
+
+    if (isCustodial()) {
+      const data = await api.walletCreateInvoice(sats, "SatsParty Invoice");
+      paymentRequest = data.invoice;
+      paymentHash = data.paymentHash;
+    } else if (ctx.nwcService.isConnected()) {
       const inv = await ctx.nwcService.makeInvoice(sats, "SatsParty Invoice");
-      console.log("[Dashboard] makeInvoice returned:", { paymentRequest: inv.paymentRequest?.substring(0, 40), paymentHash: inv.paymentHash });
-
-      if (!inv.paymentRequest) {
-        ctx.showToast("Error: invoice vacío");
-        return;
-      }
-
-      const resultEl = document.getElementById("invoice-result");
-      const amountEl = document.getElementById("invoice-amount-display");
-      const qrEl = document.getElementById("invoice-qr-container");
-      const bolt11El = document.getElementById("invoice-bolt11-preview");
-      const copyBtn = document.getElementById("btn-copy-invoice");
-
-      if (amountEl) amountEl.textContent = sats.toLocaleString() + " sats";
-      if (qrEl) qrEl.innerHTML = ctx.generateQRSvg(inv.paymentRequest.toUpperCase(), 200);
-      if (bolt11El) bolt11El.textContent = inv.paymentRequest;
-      if (resultEl) resultEl.style.display = "block";
-
-      // Botón copiar invoice
-      if (copyBtn) {
-        copyBtn.onclick = () => {
-          navigator.clipboard.writeText(inv.paymentRequest).then(() => {
-            ctx.showToast("Invoice copiado ✓");
-            copyBtn.textContent = "Copiado ✓";
-            setTimeout(() => { copyBtn.textContent = "Copiar Invoice"; }, 2000);
-          }).catch(() => {
-            // Fallback para browsers sin clipboard API
-            const ta = document.createElement("textarea");
-            ta.value = inv.paymentRequest;
-            ta.style.position = "fixed";
-            ta.style.opacity = "0";
-            document.body.appendChild(ta);
-            ta.select();
-            document.execCommand("copy");
-            document.body.removeChild(ta);
-            ctx.showToast("Invoice copiado ✓");
-          });
-        };
-      }
-
-      ctx.showToast("Invoice generado ✓");
-
-      // Poll for payment
-      pollInvoice(inv.paymentHash, sats);
+      paymentRequest = inv.paymentRequest;
+      paymentHash = inv.paymentHash;
     } else {
       ctx.showToast("Wallet no conectada");
+      return;
     }
+
+    if (!paymentRequest) {
+      ctx.showToast("Error: invoice vacío");
+      return;
+    }
+
+    console.log("[Dashboard] Invoice generated:", { paymentRequest: paymentRequest.substring(0, 40), paymentHash });
+
+    const resultEl = document.getElementById("invoice-result");
+    const amountEl = document.getElementById("invoice-amount-display");
+    const qrEl = document.getElementById("invoice-qr-container");
+    const bolt11El = document.getElementById("invoice-bolt11-preview");
+    const copyBtn = document.getElementById("btn-copy-invoice");
+
+    if (amountEl) amountEl.textContent = sats.toLocaleString() + " sats";
+    if (qrEl) qrEl.innerHTML = ctx.generateQRSvg(paymentRequest.toUpperCase(), 200);
+    if (bolt11El) bolt11El.textContent = paymentRequest;
+    if (resultEl) resultEl.style.display = "block";
+
+    if (copyBtn) {
+      copyBtn.onclick = () => {
+        navigator.clipboard.writeText(paymentRequest).then(() => {
+          ctx.showToast("Invoice copiado ✓");
+          copyBtn.textContent = "Copiado ✓";
+          setTimeout(() => { copyBtn.textContent = "Copiar Invoice"; }, 2000);
+        }).catch(() => {
+          const ta = document.createElement("textarea");
+          ta.value = paymentRequest;
+          ta.style.position = "fixed";
+          ta.style.opacity = "0";
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand("copy");
+          document.body.removeChild(ta);
+          ctx.showToast("Invoice copiado ✓");
+        });
+      };
+    }
+
+    ctx.showToast("Invoice generado ✓");
+    pollInvoice(paymentHash, sats);
   } catch (err) {
     ctx.showToast("Error: " + err.message);
   }
@@ -645,10 +686,24 @@ async function pollInvoice(paymentHash, sats) {
   for (let i = 0; i < 100; i++) {
     await sleep(3000);
     try {
-      const result = await ctx.nwcService.lookupInvoice(paymentHash);
-      if (result.paid) {
-        // Refresh balance first
-        await refreshBalance();
+      let paid = false;
+
+      if (isCustodial()) {
+        const data = await api.walletCheckInvoice(paymentHash);
+        paid = data.paid;
+        if (paid) {
+          ctx.setState({ balance: data.balance });
+          updateBalanceDisplay();
+        }
+      } else {
+        const result = await ctx.nwcService.lookupInvoice(paymentHash);
+        paid = result.paid;
+        if (paid) {
+          await refreshBalance();
+        }
+      }
+
+      if (paid) {
         const state = ctx.getState();
 
         // Reset receive form and show received screen
@@ -831,22 +886,36 @@ async function confirmSend() {
   if (btn) { btn.disabled = true; btn.textContent = "⚡ Enviando..."; }
 
   try {
-    if (ctx.nwcService.isConnected()) {
+    let newBalance;
+
+    if (isCustodial()) {
+      // Custodial: resolve destination to bolt11, then pay via backend
+      const decoded = decodeBolt11Amount(dest);
+      let bolt11;
+      if (decoded && decoded.isBolt11) {
+        bolt11 = dest.trim();
+      } else {
+        // Resolve Lightning Address to invoice
+        const ln = new LightningAddress(dest);
+        await ln.fetch();
+        const invoice = await ln.requestInvoice({ satoshi: sats });
+        bolt11 = invoice.paymentRequest;
+      }
+      const result = await api.walletPay(bolt11, `Pago a ${dest}`);
+      newBalance = result.balance;
+    } else if (ctx.nwcService.isConnected()) {
       const decoded = decodeBolt11Amount(dest);
       if (decoded && decoded.isBolt11) {
-        // Pagar bolt11 invoice directamente
         await ctx.nwcService.payInvoice(dest.trim());
       } else {
-        // Resolver Lightning Address a invoice
         const ln = new LightningAddress(dest);
         await ln.fetch();
         const invoice = await ln.requestInvoice({ satoshi: sats });
         await ctx.nwcService.payInvoice(invoice.paymentRequest);
       }
+      newBalance = state.balance - sats;
     }
 
-    // Update state
-    const newBalance = state.balance - sats;
     ctx.setState({ balance: newBalance });
 
     // Show success
@@ -1045,7 +1114,8 @@ function getDashboardHTML() {
   const state = ctx.getState();
   const addr = state.lightningAddress || `wallet@${window.location.host}`;
   const balance = state.balance || 0;
-  const nwcUrl = state.nwcUrl || "nostr+walletconnect://...";
+  const nwcUrl = state.nwcUrl || "";
+  const attendeeToken = state.attendeeToken || "";
 
   return `
   <!-- DASHBOARD -->
@@ -1276,9 +1346,10 @@ function getDashboardHTML() {
       <div class="settings-section">
         <div class="settings-section-label">Seguridad</div>
         <div class="settings-key-box">
-          <div class="field-label">NWC Connection String</div>
-          <div class="settings-key-val" id="settings-key-val">${nwcUrl}</div>
+          <div class="field-label">${attendeeToken ? "Tu clave de acceso (token)" : "NWC Connection String"}</div>
+          <div class="settings-key-val" id="settings-key-val">${attendeeToken || nwcUrl || "No configurado"}</div>
         </div>
+        <div style="font-family:var(--font-mono);font-size:.5rem;color:var(--muted);margin-bottom:.6rem;line-height:1.5">${attendeeToken ? "Guardá este token para recuperar tu cuenta desde otro dispositivo." : "Tu clave NWC para conectar tu wallet."}</div>
         <div style="display:flex;gap:.5rem">
           <button class="btn-secondary" id="btn-toggle-settings-key" style="flex:1">Revelar / ocultar</button>
           <button class="btn-secondary" id="btn-copy-nwc" style="flex:1">Copiar clave ⎘</button>
