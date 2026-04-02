@@ -12,8 +12,10 @@
   border-radius: 0 !important;
   box-shadow: none !important;
   background: #050508;
+  overflow: visible !important;
   overflow-y: auto !important;
-  overflow-x: hidden;
+  overflow-x: hidden !important;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Hide body bg.png on landing — landing has its own background */
@@ -21,10 +23,16 @@ body:has(.app--landing)::before {
   display: none !important;
 }
 
+/* Enable scroll on landing (base.css sets overflow:hidden on html,body) */
+html:has(.app--landing),
+body:has(.app--landing) {
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
 @media (min-width: 431px) {
   body:has(.app--landing) {
     display: block;
-    overflow-y: auto;
   }
   .app.app--landing {
     height: auto !important;
