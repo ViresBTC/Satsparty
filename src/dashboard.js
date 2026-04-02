@@ -1331,7 +1331,7 @@ function getDashboardHTML() {
           <div class="field-label">${attendeeToken ? "Tu clave de acceso (token)" : "NWC Connection String"}</div>
           <div class="settings-key-val" id="settings-key-val">${attendeeToken || nwcUrl || "No configurado"}</div>
         </div>
-        <div style="font-family:var(--font-mono);font-size:.5rem;color:var(--muted);margin-bottom:.6rem;line-height:1.5">${attendeeToken ? "Guardá este token para recuperar tu cuenta desde otro dispositivo." : "Tu clave NWC para conectar tu wallet."}</div>
+        <div style="font-family:var(--font-mono);font-size:.5rem;color:#fff;margin-bottom:.6rem;line-height:1.5">${attendeeToken ? "Guardá este token para recuperar tu cuenta desde otro dispositivo." : "Tu clave NWC para conectar tu wallet."}</div>
         <div style="display:flex;gap:.5rem">
           <button class="btn-secondary" id="btn-toggle-settings-key" style="flex:1">Revelar / ocultar</button>
           <button class="btn-secondary" id="btn-copy-nwc" style="flex:1">Copiar clave ⎘</button>
@@ -1343,10 +1343,14 @@ function getDashboardHTML() {
           <span class="settings-row-label">Versión</span>
           <span class="settings-row-val">0.1.0 · Hackathon</span>
         </div>
+        <div class="settings-row">
+          <span class="settings-row-label">Código fuente</span>
+          <a href="https://github.com/ViresBTC/Satsparty" target="_blank" rel="noopener" style="color:var(--primary);font-family:var(--font-mono);font-size:.65rem;text-decoration:none">github.com/ViresBTC/Satsparty ↗</a>
+        </div>
       </div>
       <div class="settings-section">
         <button class="btn-secondary" id="btn-reset-wallet" style="color:var(--orange);border-color:rgba(255,107,26,.3);width:100%">Resetear wallet</button>
-        <div style="font-family:var(--font-mono);font-size:.5rem;color:var(--muted);text-align:center;margin-top:.5rem;line-height:1.5">Esto borra tu wallet de este dispositivo.<br>Asegurate de tener tu clave guardada.</div>
+        <div style="font-family:var(--font-mono);font-size:.5rem;color:#fff;text-align:center;margin-top:.5rem;line-height:1.5">Esto borra tu wallet de este dispositivo.<br>Asegurate de tener tu clave guardada.</div>
       </div>
     </div>
   </div>
