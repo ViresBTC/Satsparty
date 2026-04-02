@@ -93,9 +93,13 @@ onboard.post("/:code/claim", async (c) => {
   // Generate unique attendee token
   const token = nanoid(21);
 
-  // Generate lightning address from name
+  // Generate lightning address from name (check uniqueness)
   const host = c.req.header("host") || "localhost";
-  const lightningAddress = generateLightningAddress(displayName.trim(), host);
+  const lightningAddress = await generateLightningAddress(db, displayName.trim(), host);
+
+  if (!lightningAddress) {
+    return c.json({ error: "Ese nombre ya está tomado. Probá con otro." }, 409);
+  }
 
   // Welcome sats (custodial — credited directly to virtual balance)
   const welcomeSats = event.welcome_sats || 100;
@@ -151,9 +155,10 @@ onboard.post("/:code/claim", async (c) => {
 });
 
 /**
- * Generate a lightning address from a display name
+ * Generate a unique lightning address from a display name.
+ * Returns null if the name is already taken.
  */
-function generateLightningAddress(name, host) {
+async function generateLightningAddress(db, name, host) {
   const sanitized = name
     .toLowerCase()
     .normalize("NFD")
@@ -161,8 +166,16 @@ function generateLightningAddress(name, host) {
     .replace(/[^a-z0-9]/g, "")
     .slice(0, 20);
 
-  const suffix = nanoid(4).toLowerCase();
-  return `${sanitized || "user"}${suffix}@${host}`;
+  const username = sanitized || "user";
+  const address = `${username}@${host}`;
+
+  const existing = await db
+    .prepare("SELECT id FROM attendees WHERE lightning_address = ?")
+    .get(address);
+
+  if (existing) return null;
+
+  return address;
 }
 
 export default onboard;
