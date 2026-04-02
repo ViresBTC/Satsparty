@@ -28,15 +28,17 @@ html, body {
   overflow: hidden;
 }
 
-/* Background — subtle gradients */
+/* Background — colorful gradients behind app frame */
 body::before {
   content: '';
   position: fixed;
   inset: 0;
   background:
-    radial-gradient(ellipse 80% 50% at 20% 20%, rgba(212,255,0,0.04) 0%, transparent 50%),
-    radial-gradient(ellipse 60% 70% at 80% 80%, rgba(255,107,26,0.03) 0%, transparent 50%),
-    radial-gradient(ellipse 50% 50% at 50% 50%, rgba(212,255,0,0.02) 0%, transparent 60%);
+    radial-gradient(ellipse 50% 60% at 25% 15%, rgba(212,255,0,0.22) 0%, transparent 55%),
+    radial-gradient(ellipse 45% 50% at 80% 20%, rgba(0,212,255,0.18) 0%, transparent 55%),
+    radial-gradient(ellipse 50% 55% at 75% 85%, rgba(212,255,0,0.16) 0%, transparent 55%),
+    radial-gradient(ellipse 40% 45% at 15% 80%, rgba(0,255,135,0.12) 0%, transparent 55%),
+    radial-gradient(ellipse 35% 35% at 50% 50%, rgba(212,255,0,0.06) 0%, transparent 50%);
   z-index: 0;
 }
 
