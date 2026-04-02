@@ -16,6 +16,11 @@
   overflow-x: hidden;
 }
 
+/* Hide body bg.png on landing — landing has its own background */
+body:has(.app--landing)::before {
+  display: none !important;
+}
+
 @media (min-width: 431px) {
   body:has(.app--landing) {
     display: block;
@@ -550,6 +555,45 @@
   transform: translateX(-40px);
 }
 
+/* ── Navigation Arrows ── */
+
+.demo-nav {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  justify-content: center;
+}
+
+.demo-arrow {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(242, 237, 230, 0.5);
+  font-size: 1.2rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  flex-shrink: 0;
+}
+
+.demo-arrow:hover {
+  border-color: var(--electric, #d4ff00);
+  color: var(--electric, #d4ff00);
+  background: rgba(212, 255, 0, 0.06);
+  transform: scale(1.1);
+  box-shadow: 0 0 15px rgba(212, 255, 0, 0.15);
+}
+
+.demo-arrow:active {
+  transform: scale(0.95);
+}
+
 /* ── Step Indicators ── */
 
 .demo-indicators {
@@ -564,6 +608,11 @@
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.12);
   transition: all 0.35s ease;
+  cursor: pointer;
+}
+
+.demo-dot:hover {
+  background: rgba(212, 255, 0, 0.4);
 }
 
 .demo-dot--active {
@@ -579,6 +628,102 @@
   letter-spacing: 0.05em;
   text-transform: uppercase;
   min-height: 1.2em;
+}
+
+/* ── Scroll Hint (hero) ── */
+
+.landing-scroll-hint {
+  position: absolute;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  z-index: 3;
+  cursor: pointer;
+  transition: opacity 0.3s ease;
+}
+
+.landing-scroll-hint:hover {
+  opacity: 1 !important;
+}
+
+.landing-scroll-label {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.6rem;
+  color: rgba(242, 237, 230, 0.3);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.landing-scroll-arrow {
+  font-size: 1.2rem;
+  color: rgba(212, 255, 0, 0.5);
+  animation: scrollBounce 2s ease-in-out infinite;
+}
+
+@keyframes scrollBounce {
+  0%, 100% { transform: translateY(0); opacity: 0.5; }
+  50% { transform: translateY(6px); opacity: 1; }
+}
+
+/* ── Quick Nav (floating) ── */
+
+.landing-quick-nav {
+  position: fixed;
+  right: 1.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  z-index: 100;
+}
+
+.landing-quick-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.landing-quick-dot:hover {
+  background: rgba(212, 255, 0, 0.3);
+  border-color: rgba(212, 255, 0, 0.4);
+  transform: scale(1.3);
+}
+
+.landing-quick-dot--active {
+  background: var(--electric, #d4ff00);
+  border-color: var(--electric, #d4ff00);
+  box-shadow: 0 0 8px rgba(212, 255, 0, 0.3);
+}
+
+.landing-quick-dot::after {
+  content: attr(data-label);
+  position: absolute;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--font-mono, monospace);
+  font-size: 0.55rem;
+  color: rgba(242, 237, 230, 0.5);
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.landing-quick-dot:hover::after {
+  opacity: 1;
 }
 
 /* ══════════════════════════════════
@@ -1227,5 +1372,15 @@
 
   .demo-s5-amount-num {
     font-size: 2.5rem;
+  }
+
+  .landing-quick-nav {
+    display: none;
+  }
+
+  .demo-arrow {
+    width: 36px;
+    height: 36px;
+    font-size: 1rem;
   }
 }

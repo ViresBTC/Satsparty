@@ -25,6 +25,31 @@ function setupLandingEvents(ctx) {
       window.location.href = "/wallet";
     });
   }
+
+  // Scroll hint — click to scroll to demo
+  const scrollHint = document.getElementById("scroll-hint");
+  if (scrollHint) {
+    scrollHint.addEventListener("click", () => {
+      document.querySelector(".landing-demo-section")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }
+
+  // Demo arrow buttons
+  const prevBtn = document.getElementById("demo-prev");
+  const nextBtn = document.getElementById("demo-next");
+  if (prevBtn) prevBtn.addEventListener("click", () => goToDemoStep((demoStep - 1 + DEMO_STEPS.length) % DEMO_STEPS.length));
+  if (nextBtn) nextBtn.addEventListener("click", () => goToDemoStep((demoStep + 1) % DEMO_STEPS.length));
+
+  // Demo dot clicks
+  document.querySelectorAll(".demo-dot").forEach((dot) => {
+    dot.addEventListener("click", () => {
+      const step = parseInt(dot.dataset.dot);
+      if (!isNaN(step)) goToDemoStep(step);
+    });
+  });
+
+  // Quick nav (floating dots)
+  setupQuickNav();
 }
 
 function getLandingHTML() {
@@ -48,6 +73,10 @@ function getLandingHTML() {
           </div>
         </div>
         <div class="landing-bolt">⚡</div>
+        <div class="landing-scroll-hint" id="scroll-hint">
+          <span class="landing-scroll-label">Ver demo</span>
+          <span class="landing-scroll-arrow">⌄</span>
+        </div>
       </section>
 
       <!-- Interactive Demo -->
@@ -176,20 +205,26 @@ function getLandingHTML() {
             </div>
           </div>
 
-          <!-- Step indicators -->
-          <div class="demo-indicators">
-            <div class="demo-dot demo-dot--active" data-dot="0"></div>
-            <div class="demo-dot" data-dot="1"></div>
-            <div class="demo-dot" data-dot="2"></div>
-            <div class="demo-dot" data-dot="3"></div>
-            <div class="demo-dot" data-dot="4"></div>
+          <!-- Navigation arrows + indicators -->
+          <div class="demo-nav">
+            <button class="demo-arrow" id="demo-prev" aria-label="Anterior">‹</button>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
+              <div class="demo-indicators">
+                <div class="demo-dot demo-dot--active" data-dot="0"></div>
+                <div class="demo-dot" data-dot="1"></div>
+                <div class="demo-dot" data-dot="2"></div>
+                <div class="demo-dot" data-dot="3"></div>
+                <div class="demo-dot" data-dot="4"></div>
+              </div>
+              <div class="demo-step-label">Escanear QR</div>
+            </div>
+            <button class="demo-arrow" id="demo-next" aria-label="Siguiente">›</button>
           </div>
-          <div class="demo-step-label">Escanear QR</div>
         </div>
       </section>
 
       <!-- How it works -->
-      <section class="landing-section">
+      <section class="landing-section landing-steps-section">
         <h2 class="landing-section-title">Cómo funciona</h2>
         <div class="landing-steps">
           <div class="landing-step">
@@ -214,7 +249,7 @@ function getLandingHTML() {
       </section>
 
       <!-- Features -->
-      <section class="landing-section landing-section-dark">
+      <section class="landing-section landing-section-dark landing-features-section">
         <h2 class="landing-section-title">Todo incluido</h2>
         <div class="landing-features">
           <div class="landing-feature">
@@ -251,13 +286,22 @@ function getLandingHTML() {
       </section>
 
       <!-- For organizers -->
-      <section class="landing-section">
+      <section class="landing-section landing-organizer-section">
         <div class="landing-organizer-box">
           <h2>¿Organizás un evento Bitcoin?</h2>
           <p>Conectá tu wallet Lightning con NWC y SatsParty se encarga del resto. Cada asistente recibe su cuenta con sats automáticamente. Vos controlás todo desde el panel admin.</p>
           <button id="landing-btn-organizer-2" class="landing-btn landing-btn-primary" onclick="window.location.href='/admin'">Crear mi evento</button>
         </div>
       </section>
+
+      <!-- Quick Nav (floating scroll dots) -->
+      <nav class="landing-quick-nav" id="landing-quick-nav">
+        <div class="landing-quick-dot landing-quick-dot--active" data-section="landing-hero" data-label="Inicio"></div>
+        <div class="landing-quick-dot" data-section="landing-demo-section" data-label="Demo"></div>
+        <div class="landing-quick-dot" data-section="landing-steps-section" data-label="Pasos"></div>
+        <div class="landing-quick-dot" data-section="landing-features-section" data-label="Features"></div>
+        <div class="landing-quick-dot" data-section="landing-organizer-section" data-label="Organizadores"></div>
+      </nav>
 
       <!-- Footer -->
       <footer class="landing-footer">
@@ -307,6 +351,13 @@ function setupDemoAnimation() {
     { threshold: 0.2 }
   );
   observer.observe(section);
+}
+
+function goToDemoStep(step) {
+  if (demoTimer) clearTimeout(demoTimer);
+  demoStep = step;
+  showDemoStep(step);
+  scheduleDemoNext();
 }
 
 function startDemo() {
@@ -453,4 +504,41 @@ function triggerSendAnimation() {
     status.textContent = "";
     status.className = "demo-s5-status";
   }, 3300);
+}
+
+/* ══════════════════════════════════════
+   Quick Nav (floating scroll dots)
+   ══════════════════════════════════════ */
+
+function setupQuickNav() {
+  const dots = document.querySelectorAll(".landing-quick-dot");
+  if (!dots.length) return;
+
+  // Click to scroll
+  dots.forEach((dot) => {
+    dot.addEventListener("click", () => {
+      const sectionClass = dot.dataset.section;
+      const target = document.querySelector(`.${sectionClass}`);
+      if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  });
+
+  // Track scroll position to highlight active dot
+  const sectionClasses = Array.from(dots).map((d) => d.dataset.section);
+  const container = document.querySelector(".app--landing") || window;
+
+  const updateActiveDot = () => {
+    let activeIdx = 0;
+    sectionClasses.forEach((cls, i) => {
+      const el = document.querySelector(`.${cls}`);
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        if (rect.top <= window.innerHeight * 0.4) activeIdx = i;
+      }
+    });
+    dots.forEach((d, i) => d.classList.toggle("landing-quick-dot--active", i === activeIdx));
+  };
+
+  (container === window ? window : container).addEventListener("scroll", updateActiveDot, { passive: true });
+  updateActiveDot();
 }
