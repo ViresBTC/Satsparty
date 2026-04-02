@@ -154,17 +154,10 @@ async function handleNameSubmit() {
     });
     walletOk = true;
   } else {
-    // No event code — demo mode
-    await runCreationAnimation();
-    const addr = generateLocalAddress(name);
-    ctx.setState({
-      displayName: name,
-      lightningAddress: addr,
-      balance: 100,
-      walletCreated: true,
-    });
-    updateCreatedScreen(100);
-    walletOk = true;
+    // No event code — no se puede crear wallet sin evento
+    ctx.showToast("Necesitás un código de evento para crear tu wallet");
+    ctx.goTo("screen-connect");
+    return;
   }
 
   if (walletOk) {
@@ -174,23 +167,6 @@ async function handleNameSubmit() {
   }
 }
 
-/**
- * Generate a local lightning address for demo mode
- */
-function generateLocalAddress(name) {
-  const clean = name
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]/g, "")
-    .slice(0, 20);
-  return `${clean || "user"}@${window.location.host}`;
-}
-
-async function handleNewWallet() {
-  // Legacy: redirect to name screen
-  ctx.goTo("screen-name");
-}
 
 function handleExistingWallet() {
   const connectBody = document.querySelector(".connect-body");
@@ -330,7 +306,7 @@ const missionContent = {
     desc: "Esta es tu wallet. El número de abajo muestra cuántos sats tenés. Los sats son fracciones de Bitcoin — 100 millones de sats = 1 Bitcoin.",
     getContent: () => {
       const state = ctx.getState();
-      const bal = state.balance || 100;
+      const bal = state.balance || 0;
       const usd = ((bal * state.btcUsd) / 100_000_000).toFixed(4);
       return `
         <div class="balance-display">
@@ -653,13 +629,13 @@ function getOnboardingHTML() {
         <div class="sats-ring"></div>
         <div class="sats-ring sats-ring-2"></div>
         <div class="sats-circle">
-          <div class="sats-circle-inner" id="created-balance">100</div>
+          <div class="sats-circle-inner" id="created-balance">0</div>
           <div class="sats-circle-label">SAT</div>
         </div>
       </div>
       <div style="text-align:center;margin-bottom:2rem">
         <div style="font-family:var(--font-mono);font-size:.62rem;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);margin-bottom:.4rem">Acabás de recibir</div>
-        <div style="font-family:var(--font-display);font-size:1.8rem;color:var(--green)">+ <span id="created-balance-display">100</span> sats ⚡</div>
+        <div style="font-family:var(--font-display);font-size:1.8rem;color:var(--green)">+ <span id="created-balance-display">0</span> sats ⚡</div>
       </div>
       <div style="display:flex;flex-direction:column;gap:.8rem">
         <div class="info-card">
@@ -673,7 +649,7 @@ function getOnboardingHTML() {
           <div class="info-card-icon">💰</div>
           <div class="info-card-content">
             <div class="info-card-label">Balance actual</div>
-            <div class="info-card-value" id="created-balance-card">100 sats</div>
+            <div class="info-card-value" id="created-balance-card">0 sats</div>
           </div>
         </div>
       </div>
@@ -709,7 +685,7 @@ function getOnboardingHTML() {
             <div class="mission-title">Creaste tu wallet</div>
             <div class="mission-desc">Ya sos parte de la red Lightning</div>
           </div>
-          <div class="mission-reward">+100 sats</div>
+          <div class="mission-reward">+${state.welcomeSats || 0} sats</div>
         </div>
         <div class="mission active" id="m1">
           <div class="mission-check">1</div>
@@ -790,7 +766,7 @@ function getOnboardingHTML() {
           <div class="ticket-row">
             <div>
               <div class="ticket-field-label">Balance</div>
-              <div class="ticket-field-value electric" id="ticket-balance">100 sats</div>
+              <div class="ticket-field-value electric" id="ticket-balance">${state.balance || 0} sats</div>
             </div>
             <div style="text-align:right">
               <div class="ticket-field-label">Fecha</div>

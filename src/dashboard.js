@@ -416,23 +416,6 @@ function cycleCurrency() {
 
 // ── HISTORY ──
 
-function getDemoTransactions() {
-  const now = Math.floor(Date.now() / 1000);
-  return [
-    { type: "in", amount: 100, description: "🎉 Bienvenida SatsParty", timestamp: now - 120 },
-    { type: "out", amount: 50, description: "☕ Café con Lightning", timestamp: now - 900 },
-    { type: "in", amount: 200, description: "🎯 Misión: Primer pago", timestamp: now - 1800 },
-    { type: "out", amount: 30, description: "🍕 Porción de pizza", timestamp: now - 3600 },
-    { type: "in", amount: 500, description: "💸 Recarga desde exchange", timestamp: now - 7200 },
-    { type: "out", amount: 150, description: "🎁 Regalo a amigo", timestamp: now - 10800 },
-    { type: "in", amount: 1000, description: "🏆 Premio trivia Lightning", timestamp: now - 86400 },
-    { type: "out", amount: 75, description: "🍺 Cerveza artesanal", timestamp: now - 86400 - 1800 },
-    { type: "in", amount: 300, description: "🤝 Split de cuenta", timestamp: now - 86400 - 3600 },
-    { type: "out", amount: 21, description: "⚡ Tip al barista", timestamp: now - 86400 * 2 },
-    { type: "in", amount: 150, description: "🎯 Misión: Escanear QR", timestamp: now - 86400 * 2 - 600 },
-  ];
-}
-
 async function refreshHistory() {
   try {
     if (isCustodial()) {
@@ -451,12 +434,11 @@ async function refreshHistory() {
       ctx.setState({ transactions: txs });
       renderHistoryList(txs);
     } else {
-      const demoTxs = getDemoTransactions();
-      renderHistoryList(demoTxs);
+      renderHistoryList([]);
     }
   } catch (err) {
     console.error("Error fetching history:", err);
-    renderHistoryList(ctx.getState().transactions || getDemoTransactions());
+    renderHistoryList(ctx.getState().transactions || []);
   }
 }
 
