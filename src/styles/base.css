@@ -28,17 +28,17 @@ html, body {
   overflow: hidden;
 }
 
-/* Background — colorful gradients behind app frame */
+/* Background — image + colorful gradients */
 body::before {
   content: '';
   position: fixed;
   inset: 0;
   background:
-    radial-gradient(ellipse 50% 60% at 25% 15%, rgba(212,255,0,0.22) 0%, transparent 55%),
-    radial-gradient(ellipse 45% 50% at 80% 20%, rgba(0,212,255,0.18) 0%, transparent 55%),
-    radial-gradient(ellipse 50% 55% at 75% 85%, rgba(212,255,0,0.16) 0%, transparent 55%),
-    radial-gradient(ellipse 40% 45% at 15% 80%, rgba(0,255,135,0.12) 0%, transparent 55%),
-    radial-gradient(ellipse 35% 35% at 50% 50%, rgba(212,255,0,0.06) 0%, transparent 50%);
+    radial-gradient(ellipse 50% 60% at 25% 15%, rgba(212,255,0,0.15) 0%, transparent 55%),
+    radial-gradient(ellipse 45% 50% at 80% 20%, rgba(0,212,255,0.12) 0%, transparent 55%),
+    radial-gradient(ellipse 50% 55% at 75% 85%, rgba(212,255,0,0.10) 0%, transparent 55%),
+    radial-gradient(ellipse 40% 45% at 15% 80%, rgba(0,255,135,0.08) 0%, transparent 55%),
+    url('/nueva.jpg') center center / cover no-repeat;
   z-index: 0;
 }
 
